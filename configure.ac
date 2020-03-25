@@ -2211,7 +2211,7 @@ if test "${prefix}" = "NONE"; then
 else
   frr_statedir_prefix=${prefix}
 fi
-if test "${localstatedir}" = '${prefix}/var'; then
+if test "${localstatedir}" = "${prefix}/var"; then
   for FRR_STATE_DIR in ${frr_statedir_prefix}/var/run dnl
 			${frr_statedir_prefix}/var/adm dnl
 			${frr_statedir_prefix}/etc dnl
@@ -2225,6 +2225,9 @@ if test "${localstatedir}" = '${prefix}/var'; then
   frr_statedir=$FRR_STATE_DIR
 else
   frr_statedir=${localstatedir}
+  for I in 1 2 3 4 5 6 7 8 9 10; do
+  	eval frr_statedir="\"$frr_statedir\""
+  done
 fi
 if test $frr_statedir = "/dev/null"; then
     AC_MSG_ERROR([STATE DIRECTORY NOT FOUND! FIX OR SPECIFY --localstatedir!])
@@ -2359,6 +2362,34 @@ AS_IF([test "x$with_pkg_git_version" = "xyes"], [
 	PERL="$PERL"
     ])
 ])
+
+
+AC_ARG_VAR([UBPF_LIB], [Location of libubpf])
+AC_ARG_VAR([UBPF_INC], [Header loctation of libubpf])
+
+ac_cflags_save="$CFLAGS"
+CFLAGS="$CFLAGS -I$UBPF_INC"
+AC_CHECK_HEADER([public_bpf.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+UBPF_INC="$CFLAGS"
+CFLAGS="$ac_cflags_save"
+
+AC_SEARCH_LIBS([sqrt], [m], [], [AC_MSG_ERROR([math library not found)])])
+AC_SEARCH_LIBS([json_object_from_file], [json-c], [], [AC_MSG_ERROR([json-c library not found)])])
+AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([rt library not found)])])
+
+ac_ldflags_save="$LDFLAGS"
+ac_libs_save="$LIBS"
+LDFLAGS="$LDFLAGS -L${UBPF_LIB}"
+AC_CHECK_LIB([ubpf], [init_plugin_manager],
+               [], [AC_MSG_ERROR([libubpf not found (use LIBUBPF variable to include it)])],
+               [])
+UBPF_LIB="-L${UBPF_LIB} ${LIBS}"
+LIBS="$ac_libs_save"
+LDFLAGS="$ac_ldflags_save"
+
+AC_SUBST([UBPF_LIB])
+AC_SUBST([UBPF_INC])
+
 
 ## Hack, but working solution to avoid rebuilding of frr.info.
 ## It's already in CVS until texinfo 4.7 is more common.

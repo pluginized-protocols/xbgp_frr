@@ -19,6 +19,7 @@
  */
 
 #include <zebra.h>
+#include <public.h>
 
 #include "linklist.h"
 #include "prefix.h"
@@ -46,6 +47,7 @@
 #include "bgpd/bgp_lcommunity.h"
 #include "bgpd/bgp_updgrp.h"
 #include "bgpd/bgp_encap_types.h"
+#include "bgpd/bgp_ubpf.h"
 #if ENABLE_BGP_VNC
 #include "bgpd/rfapi/bgp_rfapi_cfg.h"
 #include "bgp_encap_types.h"
@@ -2744,9 +2746,26 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
 		case BGP_ATTR_PMSI_TUNNEL:
 			ret = bgp_attr_pmsi_tunnel(&attr_args);
 			break;
-		default:
-			ret = bgp_attr_unknown(&attr_args);
-			break;
+		default: {
+            bpf_args_t args[] = {
+                    [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = UNSIGNED_INT},
+                    [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = UNSIGNED_INT},
+                    [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = BUFFER_ARRAY},
+                    [3] = {.arg = &attr_args.length, .len = sizeof(uint16_t), .kind=kind_primitive, .type = UNSIGNED_INT},
+                    [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
+                    [5] = {.arg = attr, .len=sizeof(attr), .kind= kind_hidden, .type=ATTRIBUTE},
+            };
+            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 4, check_arg_decode, {
+                // failed, our plugin don't recognize this attribute
+                ret = bgp_attr_unknown(&attr_args);
+            }, {
+                // on success, the attribute is successfully read
+                // advance stream offset
+                stream_forward_getp(BGP_INPUT(peer), length);
+                ret = BGP_ATTR_PARSE_PROCEED;
+            })
+            break;
+        }
 		}
 
 		if (ret == BGP_ATTR_PARSE_ERROR_NOTIFYPLS) {
@@ -3674,6 +3693,28 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 		stream_put_ipv4(s, attr->nexthop.s_addr);
 		// Unicast tunnel endpoint IP address
 	}
+
+	mempool_iterator *it = new_mempool_iterator(attr->ubpf_mempool);
+	struct ubpf_attr *plug_attr;
+	if (it) {
+        while(hasnext_mempool_iterator(it)) {
+
+            plug_attr = next_mempool_iterator(it);
+
+            bpf_args_t attr_args[] = {
+                    {.arg = plug_attr, .len=sizeof(struct ubpf_attr), .kind= kind_hidden, .type=ATTRIBUTE},
+                    {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM}
+            };
+
+            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, 2, ret_val_check_encode_attr, {
+                // ho no !
+            }, {
+                // oh yes !
+            })
+        }
+    }
+
+
 
 	/* Unknown transit attribute. */
 	if (attr->transit)

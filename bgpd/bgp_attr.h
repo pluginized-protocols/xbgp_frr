@@ -21,6 +21,7 @@
 #ifndef _QUAGGA_BGP_ATTR_H
 #define _QUAGGA_BGP_ATTR_H
 
+#include <ubpf_mempool_hdr.h>
 #include "mpls.h"
 #include "bgp_attr_evpn.h"
 #include "bgpd/bgp_encap_types.h"
@@ -218,6 +219,8 @@ struct attr {
 
 	/* rmap set table */
 	uint32_t rmap_table_id;
+
+	mem_pool *ubpf_mempool; // used for new attributes
 };
 
 /* rmap_change_flags definition */

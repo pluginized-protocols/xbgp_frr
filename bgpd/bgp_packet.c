@@ -1432,6 +1432,8 @@ static int bgp_update_receive(struct peer *peer, bgp_size_t size)
 	memset(&nlris, 0, sizeof(nlris));
 	memset(peer->rcvd_attr_str, 0, BUFSIZ);
 	peer->rcvd_attr_printed = 0;
+	attr.ubpf_mempool = new_mempool();
+	if (!attr.ubpf_mempool) return BGP_Stop;
 
 	s = peer->curr;
 	end = stream_pnt(s) + size;

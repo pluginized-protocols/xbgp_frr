@@ -20,6 +20,8 @@
 
 #include <zebra.h>
 
+#include <public.h>
+
 #include <pthread.h>
 #include "vector.h"
 #include "command.h"
@@ -60,10 +62,24 @@
 #include "bgpd/bgp_keepalives.h"
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_errors.h"
+#include "bgp_ubpf.h"
 
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
 #endif
+
+static proto_ext_fun_t api_proto[] = {
+        {.name = "add_attr", .fn = add_attr},
+        {.name = "get_attr", .fn = get_attr},
+        {.name = "get_attr_by_code_from_rte", .fn = get_attr_by_code_from_rte},
+        {.name = "write_to_buffer", .fn = write_to_buffer},
+};
+
+static plugin_info_t plugin_info[] = {
+        {.plugin_str = "bgp_encode_attr", .plugin_id = BGP_ENCODE_ATTR},
+        {.plugin_str = "bgp_decode_attr", .plugin_id = BGP_DECODE_ATTR},
+        {.plugin_str = "bgp_med_decision", .plugin_id = BGP_MED_DECISION},
+};
 
 /* bgpd options, we use GNU getopt library. */
 static const struct option longopts[] = {
@@ -145,6 +161,8 @@ __attribute__((__noreturn__)) void sigint(void)
 	zlog_notice("Terminating on signal");
 	assert(bm->terminating == false);
 	bm->terminating = true;	/* global flag that shutting down */
+
+	ubpf_terminate();
 
 	bgp_terminate();
 
@@ -487,6 +505,31 @@ int main(int argc, char **argv)
 
 	frr_config_fork();
 	/* must be called after fork() */
+
+	int must_slash = frr_sysconfdir[strnlen(frr_sysconfdir, PATH_MAX) - 1] == '/' ? 0 : 1;
+
+    char json_conf[PATH_MAX];
+    char plugin_dir[PATH_MAX];
+    int len = 0;
+
+    memset(json_conf, 0, sizeof(char) * PATH_MAX);
+    memset(plugin_dir, 0, sizeof(char) * PATH_MAX);
+
+    snprintf(json_conf, PATH_MAX-1, must_slash? "%s/manifest.json" : "%smanifest.json", frr_sysconfdir);
+    len = snprintf(plugin_dir, PATH_MAX-1, must_slash ? "%s/plugins" : "%splugins", frr_sysconfdir);
+
+    if (init_plugin_manager(api_proto, frr_sysconfdir, strnlen(frr_sysconfdir, PATH_MAX), plugin_info,
+                            NULL, NULL, 0) != 0) {
+        exit(EXIT_FAILURE);
+    }
+
+
+    if (load_plugin_from_json(json_conf, plugin_dir, len) != 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(stderr, "We are here\n");
+
 	bgp_pthreads_run();
 	frr_run(bm->master);
 

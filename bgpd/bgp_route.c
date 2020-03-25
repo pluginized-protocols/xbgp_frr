@@ -21,6 +21,7 @@
 
 #include <zebra.h>
 #include <math.h>
+#include <public.h>
 
 #include "printfrr.h"
 #include "prefix.h"
@@ -68,6 +69,7 @@
 #include "bgpd/bgp_label.h"
 #include "bgpd/bgp_addpath.h"
 #include "bgpd/bgp_mac.h"
+#include "bgpd/bgp_ubpf.h"
 
 #if ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
@@ -744,41 +746,50 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	}
 
 	/* 6. MED check. */
-	internal_as_route = (aspath_count_hops(newattr->aspath) == 0
-			     && aspath_count_hops(existattr->aspath) == 0);
-	confed_as_route = (aspath_count_confeds(newattr->aspath) > 0
-			   && aspath_count_confeds(existattr->aspath) > 0
-			   && aspath_count_hops(newattr->aspath) == 0
-			   && aspath_count_hops(existattr->aspath) == 0);
+	bpf_args_t args[] = {
+            {.arg = new, .len= sizeof(struct bgp_path_info), .kind=kind_hidden, .type=BGP_ROUTE},
+            {.arg = exist, .len = sizeof(struct bgp_path_info), .kind=kind_hidden, .type=BGP_ROUTE},
+	};
+    CALL_REPLACE_ONLY(BGP_MED_DECISION, args, 2, ret_val_rte_decision, {
+        internal_as_route = (aspath_count_hops(newattr->aspath) == 0
+                             && aspath_count_hops(existattr->aspath) == 0);
+        confed_as_route = (aspath_count_confeds(newattr->aspath) > 0
+                           && aspath_count_confeds(existattr->aspath) > 0
+                           && aspath_count_hops(newattr->aspath) == 0
+                           && aspath_count_hops(existattr->aspath) == 0);
 
-	if (bgp_flag_check(bgp, BGP_FLAG_ALWAYS_COMPARE_MED)
-	    || (bgp_flag_check(bgp, BGP_FLAG_MED_CONFED) && confed_as_route)
-	    || aspath_cmp_left(newattr->aspath, existattr->aspath)
-	    || aspath_cmp_left_confed(newattr->aspath, existattr->aspath)
-	    || internal_as_route) {
-		new_med = bgp_med_value(new->attr, bgp);
-		exist_med = bgp_med_value(exist->attr, bgp);
+        if (bgp_flag_check(bgp, BGP_FLAG_ALWAYS_COMPARE_MED)
+            || (bgp_flag_check(bgp, BGP_FLAG_MED_CONFED) && confed_as_route)
+            || aspath_cmp_left(newattr->aspath, existattr->aspath)
+            || aspath_cmp_left_confed(newattr->aspath, existattr->aspath)
+            || internal_as_route) {
+            new_med = bgp_med_value(new->attr, bgp);
+            exist_med = bgp_med_value(exist->attr, bgp);
 
-		if (new_med < exist_med) {
-			*reason = bgp_path_selection_med;
-			if (debug)
-				zlog_debug(
-					"%s: %s wins over %s due to MED %d < %d",
-					pfx_buf, new_buf, exist_buf, new_med,
-					exist_med);
-			return 1;
-		}
+            if (new_med < exist_med) {
+                *reason = bgp_path_selection_med;
+                if (debug)
+                    zlog_debug(
+                            "%s: %s wins over %s due to MED %d < %d",
+                            pfx_buf, new_buf, exist_buf, new_med,
+                            exist_med);
+                return 1;
+            }
 
-		if (new_med > exist_med) {
-			*reason = bgp_path_selection_med;
-			if (debug)
-				zlog_debug(
-					"%s: %s loses to %s due to MED %d > %d",
-					pfx_buf, new_buf, exist_buf, new_med,
-					exist_med);
-			return 0;
-		}
-	}
+            if (new_med > exist_med) {
+                *reason = bgp_path_selection_med;
+                if (debug)
+                    zlog_debug(
+                            "%s: %s loses to %s due to MED %d > %d",
+                            pfx_buf, new_buf, exist_buf, new_med,
+                            exist_med);
+                return 0;
+            }
+        }
+    }, {
+        if (VM_RETURN_VALUE == BGP_NEW) return 1;
+        else if (VM_RETURN_VALUE == BGP_OLD) return 0;
+    })
 
 	/* 7. Peer type check. */
 	new_sort = new->peer->sort;

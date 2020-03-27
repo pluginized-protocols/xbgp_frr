@@ -10,6 +10,11 @@
 #include <stdint.h>
 #include <context_hdr.h>
 
+#define RTE_NEW 0
+#define RTE_OLD 1
+#define RTE_UNK 2
+#define RTE_FAIL 3
+
 #define get_data_attr(ubpf_attr)\
 ((ubpf_attr)->length > 8 ? (void *) (ubpf_attr)->data.ptr : &((ubpf_attr)->data.val))
 
@@ -17,12 +22,6 @@ enum ubpf_plugins {
     BGP_MED_DECISION = 1, // decision process MED insertion point
     BGP_DECODE_ATTR,
     BGP_ENCODE_ATTR,
-};
-
-enum ret_decision_process {
-    BGP_UNK,
-    BGP_NEW,
-    BGP_OLD
 };
 
 enum type {
@@ -63,10 +62,11 @@ static inline int ret_val_check_encode_attr(uint64_t val) {
 static inline int ret_val_rte_decision(uint64_t val) {
 
     switch (val) {
-        case BGP_UNK:
-        case BGP_NEW:
-        case BGP_OLD:
+        case RTE_UNK:
+        case RTE_NEW:
+        case RTE_OLD:
             return 1;
+        case RTE_FAIL:
         default:
             return 0;
     }

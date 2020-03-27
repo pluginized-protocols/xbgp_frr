@@ -2375,6 +2375,7 @@ CFLAGS="$ac_cflags_save"
 
 AC_SEARCH_LIBS([sqrt], [m], [], [AC_MSG_ERROR([math library not found)])])
 AC_SEARCH_LIBS([json_object_from_file], [json-c], [], [AC_MSG_ERROR([json-c library not found)])])
+AC_SEARCH_LIBS([json_object_object_get_ex], [json-c], [], [AC_MSG_ERROR([json-c library not found)])])
 AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([rt library not found)])])
 
 ac_ldflags_save="$LDFLAGS"

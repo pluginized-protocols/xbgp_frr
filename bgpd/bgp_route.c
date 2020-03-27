@@ -787,8 +787,8 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
             }
         }
     }, {
-        if (VM_RETURN_VALUE == BGP_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_OLD) return 0;
+        if (VM_RETURN_VALUE == RTE_NEW) return 1;
+        else if (VM_RETURN_VALUE == RTE_OLD) return 0;
     })
 
 	/* 7. Peer type check. */

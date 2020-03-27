@@ -2755,8 +2755,9 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
                     [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
                     [5] = {.arg = attr, .len=sizeof(attr), .kind= kind_hidden, .type=ATTRIBUTE},
             };
-            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, args, 4, check_arg_decode, {
-                // failed, our plugin don't recognize this attribute
+            CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, 6, check_arg_decode, {
+                // failed, our plugin doesn't recognize this attribute
+                fprintf(stderr, "[%s:%s] Failed...\n", __FILE__, __FUNCTION__);
                 ret = bgp_attr_unknown(&attr_args);
             }, {
                 // on success, the attribute is successfully read
@@ -3701,15 +3702,17 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 
             plug_attr = next_mempool_iterator(it);
 
+            fprintf(stderr, "Current attr encoding %hhu\n", plug_attr->code);
+
             bpf_args_t attr_args[] = {
                     {.arg = plug_attr, .len=sizeof(struct ubpf_attr), .kind= kind_hidden, .type=ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM}
             };
 
             CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, 2, ret_val_check_encode_attr, {
-                // ho no !
+                fprintf(stderr, "Attribute encoding failed\n");
             }, {
-                // oh yes !
+                fprintf(stderr, "Attribute encoding succeeded\n");
             })
         }
     }

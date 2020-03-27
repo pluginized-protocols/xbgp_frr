@@ -48,6 +48,10 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     attr.code = code;
     attr.length = length;
 
+    if (!mp) {
+        return -1;
+    }
+
     if (length > 8) {
         attr.data.ptr = malloc(length);
         if (!attr.data.ptr) return -1;
@@ -70,8 +74,8 @@ struct path_attribute *get_attr(context_t *ctx) {
     bpf_full_args_t *fargs;
     fargs = ctx->args;
 
-    if (fargs->args[1].type != ATTRIBUTE) return NULL;
-    frr_attr = fargs->args[1].arg;
+    if (fargs->args[0].type != ATTRIBUTE) return NULL;
+    frr_attr = fargs->args[0].arg;
 
     ubpf_attr = ctx_malloc(ctx, sizeof(struct path_attribute));
     if (!ubpf_attr) return NULL;
@@ -398,7 +402,7 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
     ubpf_attr = ctx_malloc(ctx, sizeof(struct path_attribute));
     if (!ubpf_attr) return NULL;
 
-    if (!frrmempool_attr) {
+    if (frrmempool_attr) {
         if (frrmempool_to_ubpf_attr(ctx, frrmempool_attr, ubpf_attr) != 0) return NULL;
         return ubpf_attr;
     }
@@ -406,4 +410,6 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
     // check if it is an attribute handled by frrouting
     frr_to_ubpf_attr(ctx, code, frr_route, ubpf_attr);
 
+    fprintf(stderr, "Not implemented yet...\n");
+    abort();
 }

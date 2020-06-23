@@ -71,14 +71,21 @@
 static proto_ext_fun_t api_proto[] = {
         {.name = "add_attr", .fn = add_attr},
         {.name = "get_attr", .fn = get_attr},
+        {.name = "set_attr", .fn = set_attr},
         {.name = "get_attr_by_code_from_rte", .fn = get_attr_by_code_from_rte},
         {.name = "write_to_buffer", .fn = write_to_buffer},
+        {.name = "get_peer_info", .fn = get_peer_info},
+        {.name = "get_src_peer_info", .fn = get_src_peer_info},
+        {.name = "get_attr_from_code", .fn = get_attr_from_code},
+        {.name = "get_prefix", .fn = get_prefix},
 };
 
 static plugin_info_t plugin_info[] = {
         {.plugin_str = "bgp_encode_attr", .plugin_id = BGP_ENCODE_ATTR},
         {.plugin_str = "bgp_decode_attr", .plugin_id = BGP_DECODE_ATTR},
         {.plugin_str = "bgp_med_decision", .plugin_id = BGP_MED_DECISION},
+        {.plugin_str = "bgp_pre_inbound_filter", .plugin_id = BGP_PRE_INBOUND_FILTER},
+        {.plugin_str = "bgp_pre_outbound_filter", .plugin_id = BGP_PRE_OUTBOUND_FILTER},
 };
 
 /* bgpd options, we use GNU getopt library. */
@@ -91,6 +98,9 @@ static const struct option longopts[] = {
 	{"int_num", required_argument, NULL, 'I'},
 	{"no_zebra", no_argument, NULL, 'Z'},
 	{"socket_size", required_argument, NULL, 's'},
+	{"json_manifest", required_argument, NULL, 'w'},
+	{"vm_var_state", required_argument, NULL, 'x'},
+	{"plugin_folder", required_argument, NULL, 'y'},
 	{0}};
 
 /* signal definitions */
@@ -400,6 +410,10 @@ int main(int argc, char **argv)
 
 	int bgp_port = BGP_PORT_DEFAULT;
 	char *bgp_address = NULL;
+	char *vm_var_state = NULL;
+	char *plugin_folder = NULL;
+	char *json_manifest = NULL;
+	char *plugin_extra_conf_path = NULL;
 	int no_fib_flag = 0;
 	int no_zebra_flag = 0;
 	int skip_runas = 0;
@@ -408,7 +422,7 @@ int main(int argc, char **argv)
 
 	frr_preinit(&bgpd_di, argc, argv);
 	frr_opt_add(
-		"p:l:SnZe:I:s:" DEPRECATED_OPTIONS, longopts,
+		"p:l:SnZe:I:s:x:y:a:w:" DEPRECATED_OPTIONS, longopts,
 		"  -p, --bgp_port     Set BGP listen port number (0 means do not listen).\n"
 		"  -l, --listenon     Listen on specified address (implies -n)\n"
 		"  -n, --no_kernel    Do not install route to kernel.\n"
@@ -416,7 +430,11 @@ int main(int argc, char **argv)
 		"  -S, --skip_runas   Skip capabilities checks, and changing user and group IDs.\n"
 		"  -e, --ecmp         Specify ECMP to use.\n"
 		"  -I, --int_num      Set instance number (label-manager)\n"
-		"  -s, --socket_size  Set BGP peer socket send buffer size\n");
+		"  -s, --socket_size  Set BGP peer socket send buffer size\n"
+		"  -w, --json_manifest Set the path to the manifest containing plugins to load at startup\n"
+		"  -x, --vm_var_state Set the folder where the VM can store run state\n"
+		"  -y, --plugin_folder Set the folder where th VM can find plugins to load at startup time\n"
+        "  -a, --extra_conf   Set path to the extra configuration for the plugins\n");
 
 	/* Command line argument treatment. */
 	while (1) {
@@ -475,6 +493,18 @@ int main(int argc, char **argv)
 		case 's':
 			buffer_size = atoi(optarg);
 			break;
+		case 'w':
+			json_manifest = optarg;
+			break;
+		case 'x':
+			vm_var_state = optarg;
+			break;
+		case 'y':
+			plugin_folder = optarg;
+			break;
+		case 'a':
+		    plugin_extra_conf_path = optarg;
+		    break;
 		default:
 			frr_help_exit(1);
 			break;
@@ -506,29 +536,58 @@ int main(int argc, char **argv)
 	frr_config_fork();
 	/* must be called after fork() */
 
-	int must_slash = frr_sysconfdir[strnlen(frr_sysconfdir, PATH_MAX) - 1] == '/' ? 0 : 1;
 
-    char json_conf[PATH_MAX];
-    char plugin_dir[PATH_MAX];
-    int len = 0;
+	char state_dir[256];
+	char json_conf[PATH_MAX];
+	char plugin_dir[PATH_MAX];
+	char plugin_extra_cnf[PATH_MAX];
+	int must_slash;
 
-    memset(json_conf, 0, sizeof(char) * PATH_MAX);
-    memset(plugin_dir, 0, sizeof(char) * PATH_MAX);
+	memset(state_dir, 0, 256 * sizeof(char));
+	memset(plugin_dir, 0, sizeof(char) * PATH_MAX);
+	memset(json_conf, 0, sizeof(char) * PATH_MAX);
+	memset(plugin_extra_cnf, 0, sizeof(char) * PATH_MAX);
 
-    snprintf(json_conf, PATH_MAX-1, must_slash? "%s/manifest.json" : "%smanifest.json", frr_sysconfdir);
-    len = snprintf(plugin_dir, PATH_MAX-1, must_slash ? "%s/plugins" : "%splugins", frr_sysconfdir);
+    must_slash = frr_sysconfdir[strnlen(frr_sysconfdir, PATH_MAX) - 1] == '/' ? 1 : 0;
 
-    if (init_plugin_manager(api_proto, frr_sysconfdir, strnlen(frr_sysconfdir, PATH_MAX), plugin_info,
-                            NULL, NULL, 0) != 0) {
-        exit(EXIT_FAILURE);
+	if (vm_var_state) {
+		strncpy(state_dir, vm_var_state, 255);
+	} else {
+		strncpy(state_dir, frr_vtydir, 256);
+	}
+
+	if (plugin_folder) {
+		strncpy(plugin_dir, plugin_folder, PATH_MAX-1);
+	} else {
+	    snprintf(plugin_dir, PATH_MAX-1, must_slash ? "%s/plugins" : "%splugins", frr_sysconfdir);
+	}
+
+	if (json_manifest) {
+		strncpy(json_conf, json_manifest, PATH_MAX-1);
+	} else {
+		snprintf(json_conf, PATH_MAX-1, must_slash ? "%s/manifest.json" : "%smanifest.json", frr_sysconfdir);
+	}
+
+	if (plugin_extra_conf_path) {
+	    strncpy(plugin_extra_cnf, plugin_extra_conf_path, PATH_MAX-1);
+	} else {
+	    snprintf(plugin_extra_cnf, PATH_MAX-1, must_slash ? "%s/extra_conf.json" : "%sextra_conf.json", frr_sysconfdir);
+	}
+
+
+	if (init_plugin_manager(api_proto, state_dir, strnlen(state_dir, 256), plugin_info,
+			    NULL, NULL, 0) != 0) {
+		exit(EXIT_FAILURE);
+	}
+
+	if (load_plugin_from_json(json_conf, plugin_dir, strnlen(plugin_dir, PATH_MAX)) != 0) {
+		exit(EXIT_FAILURE);
+	}
+
+    if (extra_info_from_json(plugin_extra_cnf, "conf") != 0){
+        fprintf(stderr, "Manifest (extra conf) Not found");
     }
 
-
-    if (load_plugin_from_json(json_conf, plugin_dir, len) != 0) {
-        exit(EXIT_FAILURE);
-    }
-
-    fprintf(stderr, "We are here\n");
 
 	bgp_pthreads_run();
 	frr_run(bm->master);

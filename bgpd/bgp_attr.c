@@ -131,6 +131,13 @@ static struct cluster_list *cluster_parse(struct in_addr *pnt, int length)
 	return cluster;
 }
 
+struct cluster_list *plugin_cluster_cpy(struct cluster_list *clst) {
+    struct cluster_list *cluster;
+    cluster = hash_get(cluster_hash, clst, cluster_hash_alloc);
+    cluster->refcnt++;
+    return cluster;
+}
+
 int cluster_loop_check(struct cluster_list *cluster, struct in_addr originator)
 {
 	int i;
@@ -2680,94 +2687,93 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
 				continue;
 			goto done;
 		}
-
-		/* OK check attribute and store it's value. */
-		switch (type) {
-		case BGP_ATTR_ORIGIN:
-			ret = bgp_attr_origin(&attr_args);
-			break;
-		case BGP_ATTR_AS_PATH:
-			ret = bgp_attr_aspath(&attr_args);
-			break;
-		case BGP_ATTR_AS4_PATH:
-			ret = bgp_attr_as4_path(&attr_args, &as4_path);
-			break;
-		case BGP_ATTR_NEXT_HOP:
-			ret = bgp_attr_nexthop(&attr_args);
-			break;
-		case BGP_ATTR_MULTI_EXIT_DISC:
-			ret = bgp_attr_med(&attr_args);
-			break;
-		case BGP_ATTR_LOCAL_PREF:
-			ret = bgp_attr_local_pref(&attr_args);
-			break;
-		case BGP_ATTR_ATOMIC_AGGREGATE:
-			ret = bgp_attr_atomic(&attr_args);
-			break;
-		case BGP_ATTR_AGGREGATOR:
-			ret = bgp_attr_aggregator(&attr_args);
-			break;
-		case BGP_ATTR_AS4_AGGREGATOR:
-			ret = bgp_attr_as4_aggregator(&attr_args,
-						      &as4_aggregator,
-						      &as4_aggregator_addr);
-			break;
-		case BGP_ATTR_COMMUNITIES:
-			ret = bgp_attr_community(&attr_args);
-			break;
-		case BGP_ATTR_LARGE_COMMUNITIES:
-			ret = bgp_attr_large_community(&attr_args);
-			break;
-		case BGP_ATTR_ORIGINATOR_ID:
-			ret = bgp_attr_originator_id(&attr_args);
-			break;
-		case BGP_ATTR_CLUSTER_LIST:
-			ret = bgp_attr_cluster_list(&attr_args);
-			break;
-		case BGP_ATTR_MP_REACH_NLRI:
-			ret = bgp_mp_reach_parse(&attr_args, mp_update);
-			break;
-		case BGP_ATTR_MP_UNREACH_NLRI:
-			ret = bgp_mp_unreach_parse(&attr_args, mp_withdraw);
-			break;
-		case BGP_ATTR_EXT_COMMUNITIES:
-			ret = bgp_attr_ext_communities(&attr_args);
-			break;
+        bpf_args_t args[] = {
+                [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = UNSIGNED_INT},
+                [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = UNSIGNED_INT},
+                [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = BUFFER_ARRAY},
+                [3] = {.arg = &attr_args.length, .len = sizeof(uint16_t), .kind=kind_primitive, .type = UNSIGNED_INT},
+                [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
+                [5] = {.arg = attr, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=ATTRIBUTE_LIST},
+                [6] = {.arg = peer, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=PEER_SRC},
+        };
+        CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, 7, check_arg_decode, {
+            // failed, our plugin doesn't recognize this attribute
+            /* OK check attribute and store it's value. */
+            switch (type) {
+                case BGP_ATTR_ORIGIN:
+                    ret = bgp_attr_origin(&attr_args);
+                    break;
+                case BGP_ATTR_AS_PATH:
+                    ret = bgp_attr_aspath(&attr_args);
+                    break;
+                case BGP_ATTR_AS4_PATH:
+                    ret = bgp_attr_as4_path(&attr_args, &as4_path);
+                    break;
+                case BGP_ATTR_NEXT_HOP:
+                    ret = bgp_attr_nexthop(&attr_args);
+                    break;
+                case BGP_ATTR_MULTI_EXIT_DISC:
+                    ret = bgp_attr_med(&attr_args);
+                    break;
+                case BGP_ATTR_LOCAL_PREF:
+                    ret = bgp_attr_local_pref(&attr_args);
+                    break;
+                case BGP_ATTR_ATOMIC_AGGREGATE:
+                    ret = bgp_attr_atomic(&attr_args);
+                    break;
+                case BGP_ATTR_AGGREGATOR:
+                    ret = bgp_attr_aggregator(&attr_args);
+                    break;
+                case BGP_ATTR_AS4_AGGREGATOR:
+                    ret = bgp_attr_as4_aggregator(&attr_args,
+                                                  &as4_aggregator,
+                                                  &as4_aggregator_addr);
+                    break;
+                case BGP_ATTR_COMMUNITIES:
+                    ret = bgp_attr_community(&attr_args);
+                    break;
+                case BGP_ATTR_LARGE_COMMUNITIES:
+                    ret = bgp_attr_large_community(&attr_args);
+                    break;
+                case BGP_ATTR_ORIGINATOR_ID:
+                    ret = bgp_attr_originator_id(&attr_args);
+                    break;
+                case BGP_ATTR_CLUSTER_LIST:
+                    ret = bgp_attr_cluster_list(&attr_args);
+                    break;
+                case BGP_ATTR_MP_REACH_NLRI:
+                    ret = bgp_mp_reach_parse(&attr_args, mp_update);
+                    break;
+                case BGP_ATTR_MP_UNREACH_NLRI:
+                    ret = bgp_mp_unreach_parse(&attr_args, mp_withdraw);
+                    break;
+                case BGP_ATTR_EXT_COMMUNITIES:
+                    ret = bgp_attr_ext_communities(&attr_args);
+                    break;
 #if ENABLE_BGP_VNC_ATTR
-		case BGP_ATTR_VNC:
+                case BGP_ATTR_VNC:
 #endif
-		case BGP_ATTR_ENCAP:
-			ret = bgp_attr_encap(type, peer, length, attr, flag,
-					     startp);
-			break;
-		case BGP_ATTR_PREFIX_SID:
-			ret = bgp_attr_prefix_sid(&attr_args, mp_update);
-			break;
-		case BGP_ATTR_PMSI_TUNNEL:
-			ret = bgp_attr_pmsi_tunnel(&attr_args);
-			break;
-		default: {
-            bpf_args_t args[] = {
-                    [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = UNSIGNED_INT},
-                    [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = UNSIGNED_INT},
-                    [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = BUFFER_ARRAY},
-                    [3] = {.arg = &attr_args.length, .len = sizeof(uint16_t), .kind=kind_primitive, .type = UNSIGNED_INT},
-                    [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
-                    [5] = {.arg = attr, .len=sizeof(attr), .kind= kind_hidden, .type=ATTRIBUTE},
-            };
-            CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, 6, check_arg_decode, {
-                // failed, our plugin doesn't recognize this attribute
-                fprintf(stderr, "[%s:%s] Failed...\n", __FILE__, __FUNCTION__);
-                ret = bgp_attr_unknown(&attr_args);
-            }, {
-                // on success, the attribute is successfully read
-                // advance stream offset
-                stream_forward_getp(BGP_INPUT(peer), length);
-                ret = BGP_ATTR_PARSE_PROCEED;
-            })
-            break;
-        }
-		}
+                case BGP_ATTR_ENCAP:
+                    ret = bgp_attr_encap(type, peer, length, attr, flag,
+                                         startp);
+                    break;
+                case BGP_ATTR_PREFIX_SID:
+                    ret = bgp_attr_prefix_sid(&attr_args, mp_update);
+                    break;
+                case BGP_ATTR_PMSI_TUNNEL:
+                    ret = bgp_attr_pmsi_tunnel(&attr_args);
+                    break;
+                default:
+                    ret = bgp_attr_unknown(&attr_args);
+                    break;
+
+            }
+        }, {
+            // on success, the attribute is successfully read
+            // advance stream offset
+            stream_forward_getp(BGP_INPUT(peer), length);
+            ret = BGP_ATTR_PARSE_PROCEED;
+        })
 
 		if (ret == BGP_ATTR_PARSE_ERROR_NOTIFYPLS) {
 			bgp_notify_send(peer, BGP_NOTIFY_UPDATE_ERR,
@@ -3496,9 +3502,9 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 			   lcom_length(attr->lcommunity));
 	}
 
-	/* Route Reflector. */
-	if (peer->sort == BGP_PEER_IBGP && from
-	    && from->sort == BGP_PEER_IBGP) {
+	/* Route Reflector. */ /// Disable RR host implem since handled by plugins
+	if (0 /*peer->sort == BGP_PEER_IBGP && from
+	    && from->sort == BGP_PEER_IBGP*/) {
 		/* Originator ID. */
 		stream_putc(s, BGP_ATTR_FLAG_OPTIONAL);
 		stream_putc(s, BGP_ATTR_ORIGINATOR_ID);
@@ -3697,6 +3703,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 
 	mempool_iterator *it = new_mempool_iterator(attr->ubpf_mempool);
 	struct ubpf_attr *plug_attr;
+	int my_one = 1;
 	if (it) {
         while(hasnext_mempool_iterator(it)) {
 
@@ -3704,10 +3711,13 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 
             bpf_args_t attr_args[] = {
                     {.arg = plug_attr, .len=sizeof(struct ubpf_attr), .kind= kind_hidden, .type=ATTRIBUTE},
-                    {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM}
+                    {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
+                    {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
+                    {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
+                    {.arg = from, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEER_SRC},
             };
 
-            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, 2, ret_val_check_encode_attr, {
+            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, 5, ret_val_check_encode_attr, {
                 // fail
             }, {
                 // todo check value written length announced and byte written (invalid length)

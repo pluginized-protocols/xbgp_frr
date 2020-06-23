@@ -25,6 +25,8 @@
  */
 
 #include <zebra.h>
+#include <public.h>
+#include <tools_ubpf_api.h>
 
 #include "prefix.h"
 #include "thread.h"
@@ -57,6 +59,7 @@
 #include "bgpd/bgp_mplsvpn.h"
 #include "bgpd/bgp_label.h"
 #include "bgpd/bgp_addpath.h"
+#include "bgpd/bgp_ubpf.h"
 
 /********************
  * PRIVATE FUNCTIONS

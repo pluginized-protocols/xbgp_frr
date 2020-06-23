@@ -304,6 +304,7 @@ extern unsigned long int attr_count(void);
 extern unsigned long int attr_unknown_count(void);
 
 /* Cluster list prototypes. */
+extern struct cluster_list *plugin_cluster_cpy(struct cluster_list *clst);
 extern int cluster_loop_check(struct cluster_list *, struct in_addr);
 extern void cluster_unintern(struct cluster_list *);
 

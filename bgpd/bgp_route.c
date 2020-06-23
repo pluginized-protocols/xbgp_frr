@@ -1588,6 +1588,33 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 		return 0;
 	}
 
+	struct peer_af *paf;
+	int my_i = 0;
+	struct peer *peers[subgrp->peer_count];
+
+	SUBGRP_FOREACH_PEER(subgrp, paf) {
+	    peers[my_i++] = paf->peer;
+	}
+
+
+	bpf_args_t args[] = {
+            {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
+            {.arg = peers, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO},
+            {.arg = &subgrp->peer_count, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO_COUNT},
+            {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
+            {.arg = piattr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+            {.arg = pi, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
+	};
+
+	CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, 6, ret_val_bgp_filter, {
+	    // fallback since no filter to execute
+	}, {
+	    // FILTER HAS RETURNED
+	    if (VM_RETURN_VALUE == PLUGIN_FILTER_REJECT) {
+	        return 0;
+	    }
+	})
+
 	/* Do not send the default route in the BGP table if the neighbor is
 	 * configured for default-originate */
 	if (CHECK_FLAG(peer->af_flags[afi][safi],
@@ -1682,8 +1709,8 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	else
 		reflect = 0;
 
-	/* IBGP reflection check. */
-	if (reflect && !samepeer_safe) {
+	/* IBGP reflection check. */ /// Disable reflection check by FRRouting since handled by plugins
+	if (0 /*reflect && !samepeer_safe*/) {
 		/* A route from a Client peer. */
 		if (CHECK_FLAG(from->af_flags[afi][safi],
 			       PEER_FLAG_REFLECTOR_CLIENT)) {
@@ -3100,6 +3127,24 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		    && pi->sub_type == sub_type
 		    && pi->addpath_rx_id == addpath_id)
 			break;
+
+	bpf_args_t args[] = {
+            {.arg = peer, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
+            {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
+            {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
+	};
+	CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, 3, ret_val_bgp_filter, {
+	    // fail
+	}, {
+        // success
+        switch (VM_RETURN_VALUE) {
+            case PLUGIN_FILTER_REJECT:
+                goto filtered;
+                break;
+            default:
+                break;
+        }
+	})
 
 	/* AS path local-as loop check. */
 	if (peer->change_local_as) {

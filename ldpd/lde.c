@@ -72,7 +72,7 @@ static struct imsgev	*iev_ldpe;
 static struct imsgev	*iev_main, *iev_main_sync;
 
 /* Master of threads. */
-struct thread_master *master;
+// struct thread_master *master; --> defined in ldpe.h
 
 /* lde privileges */
 static zebra_capabilities_t _caps_p [] =

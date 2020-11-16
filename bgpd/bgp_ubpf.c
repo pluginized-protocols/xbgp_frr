@@ -5,7 +5,7 @@
 #include <lib/stream.h>
 #include <tools_ubpf_api.h>
 #include "bgp_ubpf.h"
-#include "public.h"
+#include <ubpf_public.h>
 #include "bgpd.h"
 #include "bgp_attr.h"
 #include "bgp_aspath.h"
@@ -123,19 +123,6 @@ static void clean_attr(void *_attr) {
     }
 }
 
-static void *get_arg_from_type(context_t *ctx, unsigned int type_arg) {
-    int i;
-    bpf_full_args_t *fargs;
-
-    fargs = ctx->args;
-    for (i = 0; i < fargs->nargs; i++) {
-        if (fargs->args[i].type == type_arg) {
-            return fargs->args[i].arg;
-        }
-    }
-    return NULL;
-}
-
 int copy_attr_data(struct ubpf_attr *attr, uint8_t *data, int length) {
 
     if (length > 8) {
@@ -174,7 +161,7 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     // the attribute is not handled by FRRouting anymore !
     if (copy_attr_data(&attr, decoded_attr, length) != 0) return -1;
 
-    if (add_single_mempool(mp, code, clean_attr, sizeof(struct ubpf_attr), &attr) != 0)
+    if (add_mempool(mp, code, clean_attr, sizeof(struct ubpf_attr), &attr,0) != 0)
         return -1;
 
     return 0;
@@ -187,7 +174,7 @@ int set_attr(context_t *ctx, struct path_attribute *attr) {
 struct path_attribute *get_attr(context_t *ctx) {
     struct path_attribute *ubpf_attr;
     struct ubpf_attr *frr_attr;
-    bpf_full_args_t *fargs;
+    args_t *fargs;
     fargs = ctx->args;
 
     if (fargs->args[0].type != ATTRIBUTE) return NULL;
@@ -209,7 +196,7 @@ struct path_attribute *get_attr(context_t *ctx) {
 
 int write_to_buffer(context_t *ctx, uint8_t *ptr, size_t len) {
 
-    bpf_full_args_t *fargs;
+    args_t *fargs;
     size_t bytes_written;
     struct stream *s;
 
@@ -485,7 +472,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr, struct pat
 static inline int find_idx_arg(context_t *ctx, int type) {
 
     int i;
-    bpf_full_args_t *fargs;
+    args_t *fargs;
 
     if (!ctx) return -1;
 
@@ -501,10 +488,11 @@ static inline int find_idx_arg(context_t *ctx, int type) {
 struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, int args_rte) {
 
     unsigned int i;
-    bpf_full_args_t *fargs;
+    args_t *fargs;
     struct ubpf_attr *frrmempool_attr;
     struct bgp_path_info *frr_route;
     struct path_attribute *ubpf_attr;
+    struct mempool_data data;
     fargs = ctx->args;
     mem_pool *mp;
 
@@ -515,7 +503,10 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
     frr_route = fargs->args[args_rte].arg;
 
     mp = frr_route->attr->ubpf_mempool;
-    if (mp) frrmempool_attr = get_mempool_ptr(mp, code);
+    if (mp) {
+        if (get_mempool_data(mp, code, &data) != 0) return NULL;
+        frrmempool_attr = data.data;
+    }
 
     ubpf_attr = ctx_malloc(ctx, sizeof(struct path_attribute));
     if (!ubpf_attr) return NULL;
@@ -535,9 +526,10 @@ struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, i
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
     unsigned int i;
     struct attr *attr;
-    bpf_full_args_t *fargs;
+    args_t *fargs;
     struct ubpf_attr *frrmempool_attr;
     struct path_attribute *plugin_attr;
+    struct mempool_data data;
 
     fargs = ctx->args;
     attr = NULL;
@@ -552,8 +544,8 @@ struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
         return NULL;
     }
     /* 1. first, check into the memory pool */
-    frrmempool_attr = get_mempool_ptr(mp, code);
-    if (frrmempool_attr) {
+    if (get_mempool_data(mp, code, &data) != 0) {
+        frrmempool_attr = data.data;
         if (frrmempool_to_ubpf_attr(ctx, frrmempool_attr, plugin_attr) != 0) {
             return NULL;
         } else {

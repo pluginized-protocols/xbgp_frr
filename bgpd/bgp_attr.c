@@ -19,7 +19,7 @@
  */
 
 #include <zebra.h>
-#include <public.h>
+#include <ubpf_public.h>
 
 #include "linklist.h"
 #include "prefix.h"
@@ -2687,7 +2687,7 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
 				continue;
 			goto done;
 		}
-        bpf_args_t args[] = {
+        entry_args_t args[] = {
                 [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = UNSIGNED_INT},
                 [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = UNSIGNED_INT},
                 [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = BUFFER_ARRAY},
@@ -2695,8 +2695,9 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
                 [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
                 [5] = {.arg = attr, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=ATTRIBUTE_LIST},
                 [6] = {.arg = peer, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=PEER_SRC},
+                entry_arg_null,
         };
-        CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, 7, check_arg_decode, {
+        CALL_REPLACE_ONLY(BGP_DECODE_ATTR, args, check_arg_decode, {
             // failed, our plugin doesn't recognize this attribute
             /* OK check attribute and store it's value. */
             switch (type) {
@@ -3705,19 +3706,20 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 	struct ubpf_attr *plug_attr;
 	int my_one = 1;
 	if (it) {
-        while(hasnext_mempool_iterator(it)) {
+        while(next_mempool_iterator(it)) {
 
             plug_attr = next_mempool_iterator(it);
 
-            bpf_args_t attr_args[] = {
+            entry_args_t attr_args[] = {
                     {.arg = plug_attr, .len=sizeof(struct ubpf_attr), .kind= kind_hidden, .type=ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                     {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                     {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
                     {.arg = from, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEER_SRC},
+                    entry_arg_null
             };
 
-            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, 5, ret_val_check_encode_attr, {
+            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
                 // fail
             }, {
                 // todo check value written length announced and byte written (invalid length)

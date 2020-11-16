@@ -25,7 +25,7 @@
  */
 
 #include <zebra.h>
-#include <public.h>
+#include <ubpf_public.h>
 #include <tools_ubpf_api.h>
 
 #include "prefix.h"

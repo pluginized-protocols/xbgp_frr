@@ -22,7 +22,7 @@
 
 #include <zebra.h>
 #include <sys/time.h>
-#include <public.h>
+#include <ubpf_public.h>
 
 #include "thread.h"
 #include "stream.h"

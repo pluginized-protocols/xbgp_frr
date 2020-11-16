@@ -21,7 +21,7 @@
 
 #include <zebra.h>
 #include <math.h>
-#include <public.h>
+#include <ubpf_public.h>
 
 #include "printfrr.h"
 #include "prefix.h"
@@ -746,11 +746,12 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	}
 
 	/* 6. MED check. */
-	bpf_args_t args[] = {
+	entry_args_t args[] = {
             {.arg = new, .len= sizeof(struct bgp_path_info), .kind=kind_hidden, .type=BGP_ROUTE},
             {.arg = exist, .len = sizeof(struct bgp_path_info), .kind=kind_hidden, .type=BGP_ROUTE},
+            entry_arg_null,
 	};
-    CALL_REPLACE_ONLY(BGP_MED_DECISION, args, 2, ret_val_rte_decision, {
+    CALL_REPLACE_ONLY(BGP_MED_DECISION, args, ret_val_rte_decision, {
         internal_as_route = (aspath_count_hops(newattr->aspath) == 0
                              && aspath_count_hops(existattr->aspath) == 0);
         confed_as_route = (aspath_count_confeds(newattr->aspath) > 0
@@ -1597,16 +1598,17 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	}
 
 
-	bpf_args_t args[] = {
+	entry_args_t args[] = {
             {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
             {.arg = peers, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO},
             {.arg = &subgrp->peer_count, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO_COUNT},
             {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
             {.arg = piattr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
             {.arg = pi, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
+            entry_arg_null,
 	};
 
-	CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, 6, ret_val_bgp_filter, {
+	CALL_REPLACE_ONLY(BGP_PRE_OUTBOUND_FILTER, args, ret_val_bgp_filter, {
 	    // fallback since no filter to execute
 	}, {
 	    // FILTER HAS RETURNED
@@ -3128,12 +3130,13 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		    && pi->addpath_rx_id == addpath_id)
 			break;
 
-	bpf_args_t args[] = {
+	entry_args_t args[] = {
             {.arg = peer, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
             {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
             {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
+            entry_arg_null,
 	};
-	CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, 3, ret_val_bgp_filter, {
+	CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, ret_val_bgp_filter, {
 	    // fail
 	}, {
         // success

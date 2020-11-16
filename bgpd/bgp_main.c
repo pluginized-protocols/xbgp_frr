@@ -20,7 +20,7 @@
 
 #include <zebra.h>
 
-#include <public.h>
+#include <ubpf_public.h>
 
 #include <pthread.h>
 #include "vector.h"
@@ -78,14 +78,16 @@ static proto_ext_fun_t api_proto[] = {
         {.name = "get_src_peer_info", .fn = get_src_peer_info},
         {.name = "get_attr_from_code", .fn = get_attr_from_code},
         {.name = "get_prefix", .fn = get_prefix},
+        proto_ext_func_null
 };
 
-static plugin_info_t plugin_info[] = {
-        {.plugin_str = "bgp_encode_attr", .plugin_id = BGP_ENCODE_ATTR},
-        {.plugin_str = "bgp_decode_attr", .plugin_id = BGP_DECODE_ATTR},
-        {.plugin_str = "bgp_med_decision", .plugin_id = BGP_MED_DECISION},
-        {.plugin_str = "bgp_pre_inbound_filter", .plugin_id = BGP_PRE_INBOUND_FILTER},
-        {.plugin_str = "bgp_pre_outbound_filter", .plugin_id = BGP_PRE_OUTBOUND_FILTER},
+static insertion_point_info_t plugin_info[] = {
+        {.insertion_point_str = "bgp_encode_attr", .insertion_point_id = BGP_ENCODE_ATTR},
+        {.insertion_point_str = "bgp_decode_attr", .insertion_point_id = BGP_DECODE_ATTR},
+        {.insertion_point_str = "bgp_med_decision", .insertion_point_id = BGP_MED_DECISION},
+        {.insertion_point_str = "bgp_pre_inbound_filter", .insertion_point_id = BGP_PRE_INBOUND_FILTER},
+        {.insertion_point_str = "bgp_pre_outbound_filter", .insertion_point_id = BGP_PRE_OUTBOUND_FILTER},
+        insertion_point_info_null
 };
 
 /* bgpd options, we use GNU getopt library. */
@@ -580,7 +582,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (load_plugin_from_json(json_conf, plugin_dir, strnlen(plugin_dir, PATH_MAX)) != 0) {
+	if (load_extension_code(json_conf, plugin_dir, api_proto, plugin_info) != 0) {
 		exit(EXIT_FAILURE);
 	}
 

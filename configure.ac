@@ -2369,7 +2369,7 @@ AC_ARG_VAR([UBPF_INC], [Header loctation of libubpf])
 
 ac_cflags_save="$CFLAGS"
 CFLAGS="$CFLAGS -I$UBPF_INC"
-AC_CHECK_HEADER([public_bpf.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
 UBPF_INC="$CFLAGS"
 CFLAGS="$ac_cflags_save"
 

@@ -34,7 +34,7 @@
 
 #define MAX_ET 0xffffffff
 
-static unsigned long eth_tag_id;
+// static unsigned long eth_tag_id; # clear compilation warnings
 struct attr;
 
 /* EVPN ESI */

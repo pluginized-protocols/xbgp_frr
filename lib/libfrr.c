@@ -50,6 +50,9 @@ DEFINE_KOOH(frr_early_fini, (), ())
 DEFINE_KOOH(frr_fini, (), ())
 
 const char frr_sysconfdir[] = SYSCONFDIR;
+const char plugin_dir[] = PLUGIN_FOLDER;
+const char plugin_manifest[] = PLUGIN_MANIFEST;
+const char plugin_extra_conf[] = PLUGIN_EXTRA_CONF;
 char frr_vtydir[256];
 #ifdef HAVE_SQLITE3
 const char frr_dbdir[] = DAEMON_DB_DIR;

@@ -154,6 +154,9 @@ extern void frr_fini(void);
 extern char config_default[512];
 extern char frr_zclientpath[256];
 extern const char frr_sysconfdir[];
+extern const char plugin_dir[];
+extern const char plugin_manifest[];
+extern const char plugin_extra_conf[];
 extern char frr_vtydir[256];
 extern const char frr_moduledir[];
 

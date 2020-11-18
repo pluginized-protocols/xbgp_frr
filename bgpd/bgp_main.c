@@ -421,22 +421,30 @@ int main(int argc, char **argv)
 	int skip_runas = 0;
 	int instance = 0;
 	int buffer_size = BGP_SOCKET_SNDBUF_SIZE;
+    char opts_ok[4096];
 
-	frr_preinit(&bgpd_di, argc, argv);
+	const char opts_str[] =
+    "  -p, --bgp_port       Set BGP listen port number (0 means do not listen).\n"
+    "  -l, --listenon       Listen on specified address (implies -n)\n"
+    "  -n, --no_kernel      Do not install route to kernel.\n"
+    "  -Z, --no_zebra       Do not communicate with Zebra.\n"
+    "  -S, --skip_runas     Skip capabilities checks, and changing user and group IDs.\n"
+    "  -e, --ecmp           Specify ECMP to use.\n"
+    "  -I, --int_num        Set instance number (label-manager)\n"
+    "  -s, --socket_size    Set BGP peer socket send buffer size\n"
+    "  -w, --json_manifest  Set the path to the manifest containing plugins to load at startup. Default: %s\n"
+    "  -x, --vm_var_state   Set the folder where the VM can store run state. Default: %s\n"
+    "  -y, --plugin_folder  Set the folder where th VM can find plugins to load at startup time. Default: %s\n"
+    "  -a, --extra_conf     Set path to the extra configuration for the plugins. Default: %s\n";
+
+    frr_preinit(&bgpd_di, argc, argv);
+	memset(opts_ok, 0, sizeof(opts_ok));
+	snprintf(opts_ok, sizeof(opts_ok) - 1, opts_str,
+          plugin_manifest, frr_vtydir,  plugin_dir, plugin_extra_conf);
+
 	frr_opt_add(
 		"p:l:SnZe:I:s:x:y:a:w:" DEPRECATED_OPTIONS, longopts,
-		"  -p, --bgp_port     Set BGP listen port number (0 means do not listen).\n"
-		"  -l, --listenon     Listen on specified address (implies -n)\n"
-		"  -n, --no_kernel    Do not install route to kernel.\n"
-		"  -Z, --no_zebra     Do not communicate with Zebra.\n"
-		"  -S, --skip_runas   Skip capabilities checks, and changing user and group IDs.\n"
-		"  -e, --ecmp         Specify ECMP to use.\n"
-		"  -I, --int_num      Set instance number (label-manager)\n"
-		"  -s, --socket_size  Set BGP peer socket send buffer size\n"
-		"  -w, --json_manifest Set the path to the manifest containing plugins to load at startup\n"
-		"  -x, --vm_var_state Set the folder where the VM can store run state\n"
-		"  -y, --plugin_folder Set the folder where th VM can find plugins to load at startup time\n"
-        "  -a, --extra_conf   Set path to the extra configuration for the plugins\n");
+		opts_ok);
 
 	/* Command line argument treatment. */
 	while (1) {
@@ -541,16 +549,13 @@ int main(int argc, char **argv)
 
 	char state_dir[256];
 	char json_conf[PATH_MAX];
-	char plugin_dir[PATH_MAX];
+	char real_plugin_dir[PATH_MAX];
 	char plugin_extra_cnf[PATH_MAX];
-	int must_slash;
 
 	memset(state_dir, 0, 256 * sizeof(char));
-	memset(plugin_dir, 0, sizeof(char) * PATH_MAX);
+	memset(real_plugin_dir, 0, sizeof(char) * PATH_MAX);
 	memset(json_conf, 0, sizeof(char) * PATH_MAX);
 	memset(plugin_extra_cnf, 0, sizeof(char) * PATH_MAX);
-
-    must_slash = frr_sysconfdir[strnlen(frr_sysconfdir, PATH_MAX) - 1] == '/' ? 1 : 0;
 
 	if (vm_var_state) {
 		strncpy(state_dir, vm_var_state, 255);
@@ -559,21 +564,21 @@ int main(int argc, char **argv)
 	}
 
 	if (plugin_folder) {
-		strncpy(plugin_dir, plugin_folder, PATH_MAX-1);
+		strncpy(real_plugin_dir, plugin_folder, PATH_MAX-1);
 	} else {
-	    snprintf(plugin_dir, PATH_MAX-1, must_slash ? "%s/plugins" : "%splugins", frr_sysconfdir);
+	    strncpy(real_plugin_dir, plugin_dir, PATH_MAX-1);
 	}
 
 	if (json_manifest) {
 		strncpy(json_conf, json_manifest, PATH_MAX-1);
 	} else {
-		snprintf(json_conf, PATH_MAX-1, must_slash ? "%s/manifest.json" : "%smanifest.json", frr_sysconfdir);
+		strncpy(json_conf, plugin_manifest, PATH_MAX - 1);
 	}
 
 	if (plugin_extra_conf_path) {
 	    strncpy(plugin_extra_cnf, plugin_extra_conf_path, PATH_MAX-1);
 	} else {
-	    snprintf(plugin_extra_cnf, PATH_MAX-1, must_slash ? "%s/extra_conf.json" : "%sextra_conf.json", frr_sysconfdir);
+	    strncpy(plugin_extra_cnf, plugin_extra_conf, PATH_MAX-1);
 	}
 
 

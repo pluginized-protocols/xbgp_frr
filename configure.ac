@@ -611,6 +611,32 @@ if test "$ac_cv_lib_json_c_json_object_get" = no; then
 fi
 ])
 
+AC_ARG_WITH([plugin_folder],
+  AS_HELP_STRING([--plugin-folder=DIR], [Change the default plugin folder. Default is \${sysconfdir}/plugins]))
+AC_ARG_WITH([plugin_manifest],
+  AS_HELP_STRING([--plugin-manifest=ARG], [Change the default path to the manifest plugin. Default is \${sysconfdir}/plugins/manifest.json]))
+AC_ARG_WITH([plugin_extra_conf],
+  AS_HELP_STRING([--plugin-extra-conf=ARG], [Change the default path to the manifest that configure extra parameters for plugins. Default is ${sysconfdir}/plugins/extra_conf.json]))
+
+if [ -z "$plugin_folder" ]; then
+  AC_SUBST([PLUGIN_FOLDER], [${plugin_folder}])
+else
+  AC_SUBST([PLUGIN_FOLDER], ["${sysconfdir}"/plugins])
+fi
+
+if [ -z "$plugin_manifest" ]; then
+  AC_SUBST([PLUGIN_MANIFEST], [${plugin_manifest}])
+else
+  AC_SUBST([PLUGIN_MANIFEST], ["${sysconfdir}"/plugins/manifest.conf])
+fi
+
+if [ -z "$plugin_extra_conf" ]; then
+  AC_SUBST([PLUGIN_EXTRA_CONF], [${plugin_extra_conf}], [Default path to the plugin folder])
+else
+  AC_SUBST([PLUGIN_EXTRA_CONF], ["${sysconfdir}"/plugins/extra_conf.json])
+fi
+
+
 AC_ARG_ENABLE([dev_build],
     AS_HELP_STRING([--enable-dev-build], [build for development]))
 

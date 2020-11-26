@@ -23,6 +23,7 @@
 
 #include "lib/json.h"
 #include "bgpd/bgp_route.h"
+#include <xbgp_compliant_api/xbgp_defs.h>
 
 /* Communities attribute.  */
 struct community {
@@ -67,6 +68,7 @@ struct community {
 #define com_nthval(X,n)  ((X)->val + (n))
 
 /* Prototypes of communities attribute functions.  */
+int set_ubpf_community(struct path_attribute *ubpf_attr, struct attr *host_attr);
 extern void community_init(void);
 extern void community_finish(void);
 extern void community_free(struct community **comm);

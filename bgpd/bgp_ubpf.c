@@ -3,16 +3,274 @@
 //
 
 #include <lib/stream.h>
-#include <tools_ubpf_api.h>
-#include "bgp_ubpf.h"
-#include <ubpf_public.h>
+
+#include "xbgp_compliant_api/xbgp_plugin_host_api.h"
+#include "ubpf_public.h"
+#include <xbgp_compliant_api/xbgp_ubpf_attr.h>
 #include "bgpd.h"
 #include "bgp_attr.h"
 #include "bgp_aspath.h"
 #include "bgp_community.h"
 #include "bgp_lcommunity.h"
 #include "bgp_ecommunity.h"
-#include "ubpf_prefix.h"
+#include "bgp_ubpf.h"
+
+static ssize_t conv_origin(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
+    size_t required_size = sizeof(host_attr->origin);
+    if (required_size > buf_len) return -1;
+
+    memcpy(buf, &host_attr->origin, required_size);
+    return required_size;
+}
+
+static int set_origin(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    if (ubpf_attr->code != BGP_ATTR_ORIGIN) return -1;
+    host_attr->origin = *ubpf_attr->data;
+    return 0;
+}
+
+static ssize_t conv_aspath(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
+
+    int i;
+    struct assegment *curr_seg;
+    uint8_t *offset;
+    uint32_t as_path_cnv;
+    struct aspath *aspath = host_attr->aspath;
+
+    offset = buf;
+    for (curr_seg = aspath->segments; curr_seg != NULL; curr_seg = curr_seg->next) {
+
+        if (!cond_cpy(buf, offset, &curr_seg->type, 1, buf_len)) return -1;
+        if (!cond_cpy(buf, offset, &curr_seg->length, 1, buf_len)) return -1;
+
+        for (i = 0; i < curr_seg->length; i++) {
+            as_path_cnv = htonl(curr_seg->as[i]);
+            if (!cond_cpy(buf, offset, &as_path_cnv, sizeof(uint32_t), buf_len)) {
+                return -1;
+            }
+        }
+    }
+
+    return offset - buf;
+}
+
+static int set_aspath(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    return ubpf_set_aspath(ubpf_attr, host_attr, 0);
+}
+
+static int set_as4path(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    return ubpf_set_aspath(ubpf_attr, host_attr, 1);
+}
+
+#define u32_attr_fn(field) \
+static ssize_t conv_##field (struct attr *host_attr, uint8_t *buf, size_t buf_len) { \
+    if (buf_len < sizeof(host_attr->nexthop)) { \
+        return -1; \
+    }                      \
+    memcpy(buf, &host_attr->field, sizeof(host_attr->field))       ;                \
+    return sizeof(uint32_t); \
+}
+
+u32_attr_fn(nexthop)
+
+u32_attr_fn(med)
+
+u32_attr_fn(local_pref)
+
+u32_attr_fn(originator_id)
+
+#define set_u32_attr_fn(field, attr_code)                                          \
+static int set_##field(struct path_attribute *ubpf_attr, struct attr *host_attr) { \
+    uint32_t conv_u32val;                                                          \
+    if (ubpf_attr->code != attr_code) {                                            \
+        return -1;                                                                 \
+    }                                                                              \
+    memcpy(&conv_u32val, ubpf_attr->data, sizeof(uint32_t));                       \
+    conv_u32val = ntohl(conv_u32val);                                              \
+    memcpy(&host_attr->field, &conv_u32val, sizeof(uint32_t));                     \
+    return 0;                                                                      \
+}
+
+set_u32_attr_fn(nexthop, BGP_ATTR_NEXT_HOP)
+
+set_u32_attr_fn(med, BGP_ATTR_MULTI_EXIT_DISC)
+
+set_u32_attr_fn(local_pref, BGP_ATTR_LOCAL_PREF)
+
+set_u32_attr_fn(originator_id, BGP_ATTR_ORIGINATOR_ID)
+
+
+static ssize_t conv_aggregator(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
+    uint8_t *offset;
+
+    offset = buf;
+
+    if (!cond_cpy(buf, offset, &host_attr->aggregator_as, sizeof(host_attr->aggregator_addr), buf_len)) {
+        return -1;
+    }
+    if (!cond_cpy(buf, offset, &host_attr->aggregator_addr, sizeof(host_attr->aggregator_addr), buf_len)) {
+        return -1;
+    }
+    return offset - buf;
+}
+
+static int set_aggregator_(struct path_attribute *ubpf_attr, struct attr *host_attr, int as4n) {
+    uint8_t *offset;
+    if (ubpf_attr->code != BGP_ATTR_AGGREGATOR && ubpf_attr->code != BGP_ATTR_AS4_AGGREGATOR) {
+        return -1;
+    }
+
+    offset = ubpf_attr->data;
+
+    host_attr->aggregator_as = as4n ? *(uint32_t *) offset : *(uint16_t *) offset;
+    offset += as4n ? 4 : 2;
+
+    memcpy(&host_attr->aggregator_addr, offset, sizeof(uint32_t));
+
+    return 0;
+}
+
+static int set_aggregator(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    return set_aggregator_(ubpf_attr, host_attr, 0);
+}
+
+static int set_aggregator4(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    return set_aggregator_(ubpf_attr, host_attr, 1);
+}
+
+#define communities_func(community_type, size_community) \
+static ssize_t conv_##community_type (struct attr *host_attr, uint8_t *buf, size_t buf_len) {\
+    uint16_t tot_len = host_attr->community_type->size * size_community;\
+    if (tot_len > buf_len) {\
+        return -1;\
+    }\
+    memcpy(buf, host_attr->community_type->val, tot_len);\
+    return tot_len;\
+}
+
+communities_func(community, 4)
+
+communities_func(lcommunity, 6)
+
+communities_func(ecommunity, 8)
+
+
+static ssize_t conv_cluster_list(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
+    uint16_t tot_len;
+    tot_len = host_attr->cluster->length;
+
+    if (tot_len > buf_len) return -1;
+    memcpy(buf, host_attr->cluster->list, host_attr->cluster->length);
+    return tot_len;
+}
+
+static ssize_t noop(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
+    return 0;
+}
+
+
+static ssize_t conv_err(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
+    return -1;
+}
+
+static int set_err(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    return -1;
+}
+
+static int set_noop(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    return 0;
+}
+
+
+static struct {
+    ssize_t (*conv_attr)(struct attr *host_attr, uint8_t *temp, size_t buf_len);
+
+    int (*set_attr)(struct path_attribute *attr, struct attr *host_attr);
+
+    uint16_t flags;
+} michel[] = {
+        [BGP_ATTR_ORIGIN] = {
+                .conv_attr = conv_origin,
+                .set_attr = set_origin,
+                .flags = BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_AS4_PATH] = {
+                .conv_attr = conv_aspath,
+                .set_attr = set_as4path,
+                .flags = BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_LOCAL_PREF] = {
+                .conv_attr = conv_local_pref,
+                .set_attr = set_local_pref,
+                .flags = BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_AS_PATH] = {
+                .conv_attr = conv_aspath,
+                .set_attr = set_aspath,
+                .flags = BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_NEXT_HOP] = {
+                .conv_attr = conv_nexthop,
+                .set_attr= set_nexthop,
+                .flags = BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_MULTI_EXIT_DISC] = {
+                .conv_attr = conv_med,
+                .set_attr= set_med,
+                .flags = BGP_ATTR_FLAG_OPTIONAL
+        },
+        [BGP_ATTR_ATOMIC_AGGREGATE] = {
+                .conv_attr = noop,
+                .set_attr = set_noop,
+                .flags = BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_AGGREGATOR] = {
+                .conv_attr = conv_aggregator,
+                .set_attr= set_aggregator,
+                .flags = BGP_ATTR_FLAG_TRANS | BGP_ATTR_FLAG_OPTIONAL
+        },
+        [BGP_ATTR_AS4_AGGREGATOR] = {
+                .conv_attr = conv_aggregator,
+                .set_attr = set_aggregator4,
+                .flags = BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_COMMUNITIES] = {
+                .conv_attr = conv_community,
+                .set_attr = set_ubpf_community,
+                .flags = BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_LARGE_COMMUNITIES] = {
+                .conv_attr = conv_lcommunity,
+                .set_attr = set_ubpf_lcommunity,
+                .flags = BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_EXT_COMMUNITIES] = {
+                .conv_attr = conv_ecommunity,
+                .set_attr = set_ubpf_ecommunity,
+                .flags = BGP_ATTR_FLAG_OPTIONAL | BGP_ATTR_FLAG_TRANS
+        },
+        [BGP_ATTR_ORIGINATOR_ID] = {
+                .conv_attr = conv_originator_id,
+                .set_attr = set_originator_id,
+                .flags = BGP_ATTR_FLAG_OPTIONAL
+        },
+        [BGP_ATTR_CLUSTER_LIST] = {
+                .conv_attr = conv_cluster_list,
+                .set_attr = set_ubpf_cluster_list,
+                .flags = BGP_ATTR_FLAG_OPTIONAL
+        },
+        [BGP_ATTR_MP_REACH_NLRI] = {
+                .conv_attr = conv_err,
+                .set_attr = set_err,
+                .flags = BGP_ATTR_FLAG_OPTIONAL
+        },
+        [BGP_ATTR_MP_UNREACH_NLRI] = {
+                .conv_attr = conv_err,
+                .set_attr = set_err,
+                .flags = BGP_ATTR_FLAG_OPTIONAL
+        },
+};
+
 
 static inline uint8_t flags(unsigned int optional, unsigned int transitive,
                             unsigned int partial, unsigned int length) {
@@ -24,122 +282,39 @@ static inline uint8_t flags(unsigned int optional, unsigned int transitive,
 
 }
 
-static inline int frr_known_bgp_attr(int code) {
-    switch (code) {
-        case BGP_ATTR_ORIGIN:
-        case BGP_ATTR_AS_PATH:
-        case BGP_ATTR_AS4_PATH:
-        case BGP_ATTR_NEXT_HOP:
-        case BGP_ATTR_MULTI_EXIT_DISC:
-        case BGP_ATTR_LOCAL_PREF:
-        case BGP_ATTR_ATOMIC_AGGREGATE:
-        case BGP_ATTR_AGGREGATOR:
-        case BGP_ATTR_AS4_AGGREGATOR:
-        case BGP_ATTR_COMMUNITIES:
-        case BGP_ATTR_LARGE_COMMUNITIES:
-        case BGP_ATTR_ORIGINATOR_ID:
-        case BGP_ATTR_CLUSTER_LIST:
-        case BGP_ATTR_EXT_COMMUNITIES:
-        case BGP_ATTR_ENCAP:
-        case BGP_ATTR_PMSI_TUNNEL:
-            return 1;
-        default:
-            return 0;
-    }
-}
-
-/* data MUST be stored in the pointer ubpf_attr->data.ptr ! */
-static inline int ubpf_to_frr_attr(struct attr *frr_attr, struct ubpf_attr *ubpf_attr) {
-
-    uint32_t *cluster_list;
-    struct in_addr *clust_alloc;
-    struct cluster_list tmp, *cp_cluster;
-    int i;
+static inline int ubpf_to_frr_attr(struct attr *frr_attr, struct path_attribute *ubpf_attr) {
 
     switch (ubpf_attr->code) {
         case BGP_ATTR_ORIGIN:
-            frr_attr->origin = *ubpf_attr->data.ptr == BGP_ORIGIN_EGP ? BGP_ORIGIN_EGP :
-                               *ubpf_attr->data.ptr == BGP_ORIGIN_IGP ? BGP_ORIGIN_IGP : BGP_ORIGIN_INCOMPLETE;
-            break;
-        case BGP_ATTR_AS_PATH:
         case BGP_ATTR_AS4_PATH:
-            return -1; // todo
+        case BGP_ATTR_AS_PATH:
         case BGP_ATTR_NEXT_HOP:
-            frr_attr->nexthop.s_addr = htonl(*((uint32_t *) ubpf_attr->data.ptr));
-            break;
         case BGP_ATTR_MULTI_EXIT_DISC:
-            frr_attr->med = *((uint32_t *) ubpf_attr->data.ptr);
-            break;
         case BGP_ATTR_LOCAL_PREF:
-            frr_attr->local_pref = *((uint32_t *) ubpf_attr->data.ptr);
-            break;
         case BGP_ATTR_ATOMIC_AGGREGATE:
-            frr_attr->flag |= ATTR_FLAG_BIT(BGP_ATTR_ATOMIC_AGGREGATE);
-            break;
         case BGP_ATTR_AGGREGATOR:
         case BGP_ATTR_AS4_AGGREGATOR:
-            return -1; // TODO
         case BGP_ATTR_COMMUNITIES:
         case BGP_ATTR_LARGE_COMMUNITIES:
-        case BGP_ATTR_EXT_COMMUNITIES:
-            //  all communities are represented to Network Order inside FRRouting
-            return -1; // TODO
         case BGP_ATTR_ORIGINATOR_ID:
-            frr_attr->originator_id.s_addr = htonl(*((uint32_t *) ubpf_attr->data.ptr));
-            break;
         case BGP_ATTR_CLUSTER_LIST:
-
-            cluster_list = (uint32_t *) ubpf_attr->data.ptr;
-            clust_alloc = XMALLOC(MTYPE_CLUSTER_VAL, ubpf_attr->length);
-            for (i = 0; i < ubpf_attr->length / 4; i++) {
-                clust_alloc[i].s_addr = htonl(cluster_list[i]);
+        case BGP_ATTR_EXT_COMMUNITIES:
+            if (michel[ubpf_attr->code].set_attr(ubpf_attr, frr_attr) != 0) {
+                return -1;
             }
-
-            tmp.length = ubpf_attr->length;
-            tmp.list = clust_alloc;
-            cp_cluster = plugin_cluster_cpy(&tmp);
-
-            if (cp_cluster != &tmp) XFREE(MTYPE_CLUSTER_VAL, clust_alloc);
-
-            frr_attr->cluster = cp_cluster;
             break;
-
-        case BGP_ATTR_ENCAP:
-        case BGP_ATTR_PMSI_TUNNEL:
+        case BGP_ATTR_MP_REACH_NLRI:   // MP-BGP is handled in a special way.
+        case BGP_ATTR_MP_UNREACH_NLRI: // They are treated directly in the UPDATE process
         default:
-            return -1; /* not implemented */
+            return -1; //not handled by FRRouting !
     }
 
     return 0;
 }
 
+int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
 
-static void clean_attr(void *_attr) {
-    struct ubpf_attr *attr = _attr;
-    if (!attr) return;
-
-    if (attr->length > 8) {
-        free(attr->data.ptr);
-    }
-}
-
-int copy_attr_data(struct ubpf_attr *attr, uint8_t *data, int length) {
-
-    if (length > 8) {
-        attr->data.ptr = malloc(length);
-        if (!attr->data.ptr) return -1;
-        memcpy(attr->data.ptr, data, length);
-    } else {
-        memset(&attr->data.val, 0, 8);
-        memcpy(&attr->data.val, data, length);
-    }
-
-    return 0;
-}
-
-int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *decoded_attr) {
-
-    struct ubpf_attr attr;
+    struct path_attribute attr;
     struct attr *frr_attr;
     mem_pool *mp;
 
@@ -150,7 +325,6 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     attr.flags = flags;
     attr.code = code;
     attr.length = length;
-    attr.data.ptr = decoded_attr; /* temp storing, copy_attr_data will update this field */
 
     if (!mp) {
         return -1;
@@ -159,407 +333,180 @@ int add_attr(context_t *ctx, uint code, uint flags, uint16_t length, uint8_t *de
     // if the attribute is decoded by one plugin on DECODE side
     // there must be a plugin to decode it on ENCODE side.
     // the attribute is not handled by FRRouting anymore !
-    if (copy_attr_data(&attr, decoded_attr, length) != 0) return -1;
+    memcpy(attr.data, decoded_attr, length);
 
-    if (add_mempool(mp, code, clean_attr, sizeof(struct ubpf_attr), &attr,0) != 0)
+    if (add_mempool(mp, code, NULL, sizeof(struct path_attribute) + attr.length, &attr, 0) != 0)
         return -1;
 
     return 0;
 }
 
 int set_attr(context_t *ctx, struct path_attribute *attr) {
-    return add_attr(ctx, attr->code, attr->flags, attr->len, attr->data);
+    return add_attr(ctx, attr->code, attr->flags, attr->length, attr->data);
 }
 
 struct path_attribute *get_attr(context_t *ctx) {
     struct path_attribute *ubpf_attr;
-    struct ubpf_attr *frr_attr;
-    args_t *fargs;
-    fargs = ctx->args;
+    struct path_attribute *frr_attr;
+    size_t tot_len;
 
-    if (fargs->args[0].type != ATTRIBUTE) return NULL;
-    frr_attr = fargs->args[0].arg;
+    frr_attr = get_arg_from_type(ctx, ATTRIBUTE);
+    if (!frr_attr) return NULL;
 
-    ubpf_attr = ctx_malloc(ctx, sizeof(struct path_attribute));
+    tot_len = sizeof(struct path_attribute) + frr_attr->length;
+    ubpf_attr = ctx_malloc(ctx, tot_len);
     if (!ubpf_attr) return NULL;
 
-    ubpf_attr->code = frr_attr->code;
-    ubpf_attr->flags = frr_attr->flags;
-    ubpf_attr->len = frr_attr->length;
-    ubpf_attr->data = ctx_malloc(ctx, frr_attr->length);
-
-    if (!ubpf_attr->data) return NULL;
-    memcpy(ubpf_attr->data, get_data_attr(frr_attr), frr_attr->length);
+    memcpy(ubpf_attr, frr_attr, tot_len);
 
     return ubpf_attr;
 }
 
 int write_to_buffer(context_t *ctx, uint8_t *ptr, size_t len) {
-
-    args_t *fargs;
     size_t bytes_written;
     struct stream *s;
 
-    fargs = ctx->args;
-
-    if (fargs->args[1].type != WRITE_STREAM) return -1;
-    s = fargs->args[1].arg;
-
+    s = get_arg_from_type(ctx, WRITE_STREAM);
+    if (!s) return -1;
     bytes_written = stream_write(s, ptr, len);
     if (bytes_written != len) return -1;
 
     return 0;
 }
 
-static inline int
-frrmempool_to_ubpf_attr(context_t *ctx, struct ubpf_attr *frr_attr, struct path_attribute *ubpf_attr) {
 
-    if (!frr_attr || !ubpf_attr) return -1;
+#define check_or_fail(code)                                 \
+do {                                                        \
+    if (!CHECK_FLAG(frr_attr->flag, ATTR_FLAG_BIT(code))) { \
+        return -1;                                          \
+    }                                                       \
+} while(0)
 
-    ubpf_attr->code = frr_attr->code;
-    ubpf_attr->flags = frr_attr->flags;
+#define ATTR_FLAG_BIT_CUST(X) ({   \
+    int _ret;                      \
+    if ((X) >= 1 && (X) <= 64) {   \
+        _ret = 1ULL << ((X)-1u);    \
+    } else {                       \
+        _ret = 0;                  \
+    }                              \
+    _ret;                          \
+})
 
-    ubpf_attr->data = ctx_malloc(ctx, frr_attr->length);
-    if (!ubpf_attr->data) return -1;
+static inline struct path_attribute *
+frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
+    uint8_t *buf;
+    int data_attr_len;
+    struct path_attribute *attr;
 
-    memcpy(ubpf_attr->data, get_data_attr(frr_attr), frr_attr->length);
-    ubpf_attr->len = frr_attr->length;
-
-    return 0;
-}
-
-static inline size_t as_path_length(struct aspath *as_path, int is_as4) {
-
-    int nb_as, nb_segments;
-    struct assegment *curr_seg;
-
-    nb_as = nb_segments = 0;
-    for (curr_seg = as_path->segments; curr_seg != NULL; curr_seg = curr_seg->next) {
-        nb_segments++;
-        nb_as += curr_seg->length;
-    }
-
-    // 1 byte for aspath segment type
-    // 1 byte segment length (nb of ASes)
-    // `-> 2 * nb_segments
-    // 2 or 4 bytes per ASes
-    // `-> {2,4} * nb_as
-    return (2 * nb_segments) + ((is_as4 ? 4 : 2) * nb_as);
-}
-
-
-static inline int
-set_aspath_attr(context_t *ctx, struct path_attribute *ubpf_attr, struct aspath *aspath, int is_as4) {
-
-    int i, as_size;
-    struct assegment *curr_seg;
-    uint8_t *offset;
-    size_t attr_len;
-
-    as_size = is_as4 ? 4 : 2;
-
-    // allocate_memory
-    attr_len = as_path_length(aspath, 1); // default to 32-bits per ASes for the plugin
-    if (attr_len == 0) return -1;
-    ubpf_attr->data = ctx_malloc(ctx, attr_len);
-    if (!ubpf_attr->data) return -1;
-    offset = ubpf_attr->data;
-
-
-    for (curr_seg = aspath->segments; curr_seg != NULL; curr_seg = curr_seg->next) {
-        *offset = curr_seg->type;
-        offset++;
-        *((uint8_t *) offset) = curr_seg->length;
-        offset += 1;
-
-        for (i = 0; i < curr_seg->length; i++) {
-            *((uint32_t *) offset) = htonl(curr_seg->as[i]);
-            offset += 4;
-        }
-    }
-
-    ubpf_attr->len = attr_len;
-    ubpf_attr->code = is_as4 ? BGP_ATTR_AS4_PATH : BGP_ATTR_AS_PATH;
-    ubpf_attr->flags = flags(0, 1, 0, attr_len > 255 ? 1 : 0);
-    return 0;
-}
-
-static inline int
-set_aggregator(context_t *ctx, uint32_t aggregator_addr, uint32_t as, int is_as4, struct path_attribute *ubpf_attr) {
-
-    uint8_t *offset;
-
-    ubpf_attr->flags = flags(1, 1, 0, 0);
-    ubpf_attr->len = is_as4 ? 8 : 6;
-    ubpf_attr->data = ctx_malloc(ctx, ubpf_attr->len);
-    if (!ubpf_attr->data) return -1;
-
-    offset = ubpf_attr->data;
-
-    if (is_as4) {
-        *((uint32_t *) offset) = as;
-        offset += 4;
-    } else {
-        *((uint16_t *) offset) = (uint16_t) as;
-        offset += 2;
-    }
-
-    *((uint32_t *) offset) = aggregator_addr;
-
-    return 0;
-}
-
-#define fn_set_community(community_type, size_per_community)\
-static inline int set_##community_type (context_t *ctx, struct community_type *c, struct path_attribute *ubpf_attr) {\
-    uint16_t tot_len;\
-    tot_len = c->size * size_per_community;\
-    ubpf_attr->data = ctx_malloc(ctx, tot_len);\
-    if (!ubpf_attr->data) return -1;\
-    memcpy(ubpf_attr->data, c->val, tot_len);\
-    ubpf_attr->len = tot_len;\
-    ubpf_attr->flags = flags(1, 1, 0, tot_len > UINT8_MAX ? 1 : 0);\
-    return 0;\
-}
-
-fn_set_community(community, 4)
-
-fn_set_community(lcommunity, 6)
-
-fn_set_community(ecommunity, 8)
-
-static inline int set_cluster_list(context_t *ctx, struct cluster_list *c, struct path_attribute *ubpf_attr) {
-    \
-    uint16_t tot_len;\
-    tot_len = c->length;\
-    ubpf_attr->data = ctx_malloc(ctx, tot_len);\
-    if (!ubpf_attr->data) return -1;\
-
-    memcpy(ubpf_attr->data, c->list, tot_len);\
-    ubpf_attr->len = tot_len;\
-    ubpf_attr->flags = flags(1, 1, 0, tot_len > UINT8_MAX ? 1 : 0);\
-    return 0;\
-
-}
-
-static inline int
-set_reach_nlri(context_t *ctx, struct bgp_nlri *nlri, struct attr *attr, struct path_attribute *ubpf_attr) {
-
-    size_t offset;
-    uint8_t *buffer;
-
-    offset = 0;
-    buffer = malloc(255);
-    if (!buffer) return -1;
-
-    // afi
-    *((uint16_t *) buffer + offset) = nlri->afi;
-    offset += 2;
-    // safi
-    *((uint8_t *) buffer + offset) = nlri->safi;
-    offset += 1;
-
-    // nexthop length
-    *((uint8_t *) buffer + offset) = attr->mp_nexthop_len;
-    offset += 1;
-
-    // next hop is located somewhere is the attribute
-    // according to afi/safi
-    // TODO...
-
-    return 0;
-}
-
-static inline int
-frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr, struct path_attribute *ubpf_attr) {
-
-    if (!frr_attr || !ubpf_attr) return -1;
-    ubpf_attr->code = code;
-
-    if (code >= 1 && code <= 64) {
-        if (!(frr_attr->flag & (1ULL << (code - 1u)))) return -1;
-    } else {
-        return -1; // known frr attribute identifiers are below 64
+    buf = malloc(MAX_BUF_LEN);
+    if (!buf) {
+        return NULL;
     }
 
     switch (code) {
         case BGP_ATTR_ORIGIN:
-            ubpf_attr->len = 1;
-            ubpf_attr->data = ctx_malloc(ctx, 1);
-            if (!ubpf_attr->data) return -1;
-            *((uint8_t *) ubpf_attr->data) = frr_attr->origin;
-            break;
         case BGP_ATTR_AS4_PATH:
-            if (set_aspath_attr(ctx, ubpf_attr, frr_attr->aspath, 1) != 0)
-                return -1;
-            break;
         case BGP_ATTR_AS_PATH:
-            if (set_aspath_attr(ctx, ubpf_attr, frr_attr->aspath, 0) != 0)
-                return -1;
-            break;
         case BGP_ATTR_NEXT_HOP:
-            ubpf_attr->len = 4; //ipv4 nexthop
-            ubpf_attr->data = ctx_malloc(ctx, 4);
-            if (!ubpf_attr->data) return -1;
-            *((in_addr_t *) ubpf_attr->data) = frr_attr->nexthop.s_addr;
-            break;
         case BGP_ATTR_MULTI_EXIT_DISC:
-            ubpf_attr->flags = flags(1, 0, 0, 0);
-            ubpf_attr->len = 4;
-            ubpf_attr->data = ctx_malloc(ctx, 4);
-            if (!ubpf_attr->data) return -1;
-            *((uint32_t *) ubpf_attr->data) = frr_attr->med;
-            break;
         case BGP_ATTR_LOCAL_PREF:
-            ubpf_attr->flags = flags(1, 0, 0, 0);
-            ubpf_attr->len = 4;
-            ubpf_attr->data = ctx_malloc(ctx, 4);
-            if (!ubpf_attr->data) return -1;
-            *((uint32_t *) ubpf_attr->data) = frr_attr->local_pref;
-            break;
         case BGP_ATTR_ATOMIC_AGGREGATE:
-            ubpf_attr->flags = flags(0, 0, 0, 0);
-            ubpf_attr->len = 0;
-            ubpf_attr->data = NULL;
-            break;
         case BGP_ATTR_AGGREGATOR:
-            if (set_aggregator(ctx, frr_attr->aggregator_addr.s_addr,
-                               frr_attr->aggregator_as, 0, ubpf_attr) != 0) {
-                return -1;
-            }
-            break;
-
         case BGP_ATTR_AS4_AGGREGATOR:
-            if (set_aggregator(ctx, frr_attr->aggregator_addr.s_addr,
-                               frr_attr->aggregator_as, 1, ubpf_attr) != 0) {
-                return -1;
-            }
-            break;
         case BGP_ATTR_COMMUNITIES:
-            if (set_community(ctx, frr_attr->community, ubpf_attr) != 0) return -1;
-            break;
         case BGP_ATTR_LARGE_COMMUNITIES:
-            if (set_lcommunity(ctx, frr_attr->lcommunity, ubpf_attr)) return -1;
-            break;
         case BGP_ATTR_ORIGINATOR_ID:
-            ubpf_attr->flags = flags(1, 0, 0, 0); // TODO CHANGE FLAGS
-            ubpf_attr->len = 4;
-            ubpf_attr->data = ctx_malloc(ctx, 4);
-            if (!ubpf_attr->data) return -1;
-
-            *((uint32_t *) ubpf_attr->data) = frr_attr->originator_id.s_addr;
-            break;
         case BGP_ATTR_CLUSTER_LIST:
-            if (set_cluster_list(ctx, frr_attr->cluster, ubpf_attr) != 0) return -1;
-            break;
         case BGP_ATTR_EXT_COMMUNITIES:
-            if (set_ecommunity(ctx, frr_attr->ecommunity, ubpf_attr) != 0) return -1;
+            data_attr_len = michel[code].conv_attr(frr_attr, buf, MAX_BUF_LEN);
+            if (data_attr_len == -1) goto err;
             break;
-        case BGP_ATTR_MP_REACH_NLRI:
-        case BGP_ATTR_MP_UNREACH_NLRI:
-            // TODO !
-            return -1; // not implemented yet
-        case BGP_ATTR_ENCAP:
-        case BGP_ATTR_PREFIX_SID:
-        case BGP_ATTR_PMSI_TUNNEL:
-            return -1; //not handled !
+        case BGP_ATTR_MP_REACH_NLRI:   // MP-BGP is handled in a special way.
+        case BGP_ATTR_MP_UNREACH_NLRI: // They are treated directly in the UPDATE process
         default:
-            return -1;
+            return NULL; //not handled !
     }
 
+    attr = ctx_malloc(ctx, sizeof(struct path_attribute) + data_attr_len);
+    if (!attr) goto err;
+
+    attr->code = code;
+    attr->length = 0;
+    memcpy(attr->data, buf, data_attr_len);
+    attr->flags = michel[code].flags;
+    free(buf);
     return 0;
+    err:
+    free(buf);
+    return NULL;
 }
 
-static inline int find_idx_arg(context_t *ctx, int type) {
-
-    int i;
-    args_t *fargs;
-
-    if (!ctx) return -1;
-
-    fargs = ctx->args;
-
-    for (i = 0; i < fargs->nargs; i++) {
-        if (fargs->args[i].type == type) return i;
-    }
-
-    return -1;
-}
-
-struct path_attribute *get_attr_by_code_from_rte(context_t *ctx, uint8_t code, int args_rte) {
-
-    unsigned int i;
-    args_t *fargs;
-    struct ubpf_attr *frrmempool_attr;
-    struct bgp_path_info *frr_route;
-    struct path_attribute *ubpf_attr;
+static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, int args_rte) {
+    struct attr *frr_attr;
+    struct path_attribute *mempool_attr, *ret_attr;
     struct mempool_data data;
-    fargs = ctx->args;
     mem_pool *mp;
 
-    frrmempool_attr = NULL;
+    mempool_attr = NULL;
 
-    if (args_rte >= fargs->nargs) return NULL;
-    if (fargs->args[args_rte].type != BGP_ROUTE) return NULL;
-    frr_route = fargs->args[args_rte].arg;
-
-    mp = frr_route->attr->ubpf_mempool;
-    if (mp) {
-        if (get_mempool_data(mp, code, &data) != 0) return NULL;
-        frrmempool_attr = data.data;
+    switch (args_rte) {
+        case BGP_ROUTE_NEW:
+        case BGP_ROUTE_OLD:
+        case BGP_ROUTE:
+            frr_attr = ((struct bgp_path_info *) get_arg_from_type(ctx, args_rte))->attr;
+            break;
+        case ATTRIBUTE:
+            frr_attr = get_arg_from_type(ctx, args_rte);
+            break;
+        default:
+            return NULL;
     }
 
-    ubpf_attr = ctx_malloc(ctx, sizeof(struct path_attribute));
-    if (!ubpf_attr) return NULL;
+    if (!frr_attr) return NULL;
 
-    if (frrmempool_attr) {
-        if (frrmempool_to_ubpf_attr(ctx, frrmempool_attr, ubpf_attr) != 0) return NULL;
-        return ubpf_attr;
+    mp = frr_attr->ubpf_mempool;
+    if (mp) {
+        if (get_mempool_data(mp, code, &data) != 0) return NULL;
+        mempool_attr = data.data;
+    }
+
+    if (mempool_attr) {
+        ret_attr = ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
+        if (!ret_attr) return NULL;
+        memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
+        return ret_attr;
     }
 
     // check if it is an attribute handled by frrouting
-    frr_to_ubpf_attr(ctx, code, frr_route->attr, ubpf_attr);
-
-    fprintf(stderr, "Not implemented yet...\n");
-    abort();
+    return frr_to_ubpf_attr(ctx, code, frr_attr);
 }
+
 
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
-    unsigned int i;
-    struct attr *attr;
-    args_t *fargs;
-    struct ubpf_attr *frrmempool_attr;
-    struct path_attribute *plugin_attr;
-    struct mempool_data data;
-
-    fargs = ctx->args;
-    attr = NULL;
-    mem_pool *mp;
-
-    attr = get_arg_from_type(ctx, ATTRIBUTE_LIST);
-    if (!attr) return NULL;
-    mp = attr->ubpf_mempool;
-
-    plugin_attr = ctx_malloc(ctx, sizeof(*plugin_attr));
-    if (!plugin_attr) {
-        return NULL;
-    }
-    /* 1. first, check into the memory pool */
-    if (get_mempool_data(mp, code, &data) != 0) {
-        frrmempool_attr = data.data;
-        if (frrmempool_to_ubpf_attr(ctx, frrmempool_attr, plugin_attr) != 0) {
-            return NULL;
-        } else {
-            return plugin_attr;
-        }
-    } else {
-        /* 2. if not in the memory pool, look on the attribute itself */
-        if (frr_to_ubpf_attr(ctx, code, attr, plugin_attr) != 0) {
-            return NULL;
-        } else {
-            return plugin_attr;
-        }
-    }
+    return get_attr_by_code__(ctx, code, ATTRIBUTE_LIST);
 }
+
+struct path_attribute *get_attr_from_code_by_route(context_t *ctx, uint8_t code, int rte) {
+
+    int rte_to_internal_id;
+
+    switch (rte) {
+        case BGP_ROUTE_TYPE_NEW:
+            rte_to_internal_id = BGP_ROUTE_NEW;
+            break;
+        case BGP_ROUTE_TYPE_OLD:
+            rte_to_internal_id = BGP_ROUTE_OLD;
+            break;
+        case BGP_ROUTE_TYPE_UNDEF:
+            rte_to_internal_id = BGP_ROUTE;
+            break;
+        default:
+            return NULL;
+    }
+
+    return get_attr_by_code__(ctx, code, rte_to_internal_id);
+}
+
 
 static inline void fill_peer_info(struct ubpf_peer_info *pinfo, struct peer *peer, int local) {
     union sockunion *sk;
@@ -635,10 +582,34 @@ struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers) { // array o
     return ubpf_peers;
 }
 
-union ubpf_prefix *get_prefix(context_t *ctx) {
+
+static int frr_prefix_to_ubpf(struct prefix *frr_pfx, struct ubpf_prefix *ubpf_pfx) {
+
+    ubpf_pfx->prefixlen = frr_pfx->prefixlen;
+
+    switch (frr_pfx->family) {
+        case AF_INET:
+            ubpf_pfx->afi = XBGP_AFI_IPV4;
+            ubpf_pfx->safi = XBGP_SAFI_UNICAST;
+            memcpy(ubpf_pfx->u, &frr_pfx->u.prefix4, sizeof(frr_pfx->u.prefix4.s_addr));
+            break;
+        case AF_INET6:
+            ubpf_pfx->afi = XBGP_AFI_IPV6;
+            ubpf_pfx->safi = XBGP_SAFI_UNICAST;
+            memcpy(ubpf_pfx->u, &frr_pfx->u.prefix4, sizeof(frr_pfx->u.prefix6));
+            break;
+        default:
+            // not handled
+            return -1;
+    }
+
+    return 0;
+}
+
+struct ubpf_prefix *get_prefix(context_t *ctx) {
 
     struct prefix *frr_pfx;
-    union ubpf_prefix *ubpf_pfx;
+    struct ubpf_prefix *ubpf_pfx;
 
     frr_pfx = get_arg_from_type(ctx, PREFIX);
     ubpf_pfx = ctx_malloc(ctx, sizeof(*ubpf_pfx));
@@ -647,29 +618,13 @@ union ubpf_prefix *get_prefix(context_t *ctx) {
         return NULL;
     }
 
-    if (frr_pfx->family == AF_INET) {
-
-        ubpf_pfx->family = AF_INET;
-        ubpf_pfx->ip4_pfx.family = AF_INET;
-        ubpf_pfx->ip4_pfx.prefix_len = frr_pfx->prefixlen;
-        ubpf_pfx->ip4_pfx.p.s_addr = frr_pfx->u.prefix4.s_addr;
-
-    } else if (frr_pfx->family == AF_INET6) {
-
-        ubpf_pfx->family = AF_INET6;
-        ubpf_pfx->ip4_pfx.family = AF_INET6;
-        ubpf_pfx->ip4_pfx.prefix_len = frr_pfx->prefixlen;
-        ubpf_pfx->ip6_pfx.p = frr_pfx->u.prefix6;
-    } else {
-        fprintf(stderr, "Unknown FRR prefix family\n");
-        return NULL;
-    }
+    if (frr_prefix_to_ubpf(frr_pfx, ubpf_pfx) != 0) return NULL;
 
     return ubpf_pfx;
 
 }
 
-struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx) {
+struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
     struct bgp_path_info *pi;
     struct ubpf_nexthop *nexthop;
     pi = get_arg_from_type(ctx, RIB_ROUTE);
@@ -683,4 +638,78 @@ struct ubpf_nexthop *get_nexthop(context_t *ctx, union ubpf_prefix *fx) {
     nexthop->route_type = -1;
 
     return nexthop;
+}
+
+static int get_set_attrs(struct attr *attr, short *set_attr, size_t set_attr_len) {
+
+    int len, i;
+    size_t nb_attrs;
+    short attr_ids[] = {
+            BGP_ATTR_ORIGIN, BGP_ATTR_AS_PATH, BGP_ATTR_NEXT_HOP,
+            BGP_ATTR_MULTI_EXIT_DISC, BGP_ATTR_LOCAL_PREF, BGP_ATTR_ATOMIC_AGGREGATE,
+            BGP_ATTR_AGGREGATOR, BGP_ATTR_COMMUNITIES, BGP_ATTR_ORIGINATOR_ID,
+            BGP_ATTR_CLUSTER_LIST, BGP_ATTR_DPA, BGP_ATTR_ADVERTISER,
+            BGP_ATTR_RCID_PATH, BGP_ATTR_MP_REACH_NLRI, BGP_ATTR_MP_UNREACH_NLRI,
+            BGP_ATTR_EXT_COMMUNITIES, BGP_ATTR_AS4_PATH, BGP_ATTR_AS4_AGGREGATOR,
+            BGP_ATTR_AS_PATHLIMIT, BGP_ATTR_PMSI_TUNNEL, BGP_ATTR_ENCAP,
+            BGP_ATTR_LARGE_COMMUNITIES, BGP_ATTR_PREFIX_SID
+    };
+
+    len = sizeof(attr_ids) / sizeof(attr_ids[0]);
+
+    for (i = 0, nb_attrs = 0; i < len; i++) {
+
+        if (CHECK_FLAG(attr->flag, ATTR_FLAG_BIT_CUST(attr_ids[i]))) {
+            if (nb_attrs >= set_attr_len) return -1;
+            set_attr[nb_attrs++] = attr_ids[i];
+        }
+    }
+    return nb_attrs;
+}
+
+struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
+
+    struct bgp_route *rte;
+    struct path_attribute *pattr;
+    struct bgp_path_info *pi;
+    short set_attr[30];
+    int i, nb_attrs;
+
+    memset(set_attr, 0, sizeof(set_attr));
+    pi = get_arg_from_type(ctx, BGP_ROUTE);
+    if (!pi) return NULL;
+
+    nb_attrs = get_set_attrs(pi->attr, set_attr, sizeof(set_attr) / sizeof(set_attr[0]));
+    if (nb_attrs == -1) {
+        return NULL;
+    }
+
+    rte = ctx_malloc(ctx, sizeof(*rte));
+    if (!rte) return NULL;
+
+    rte->attr_nb = nb_attrs;
+    rte->attr = ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
+    if (!rte->attr) goto err;
+    rte->peer_info = ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
+
+
+    for (i = 0; i < nb_attrs; i++) {
+        pattr = frr_to_ubpf_attr(ctx, set_attr[i], pi->attr);
+        if (pattr == NULL) return NULL;
+        rte->attr[i] = pattr;
+    }
+
+    fill_peer_info(rte->peer_info, pi->peer, 0);
+    rte->type = pi->type;
+    if (frr_prefix_to_ubpf(&pi->net->p, &rte->pfx) != 0) goto err;
+
+    return rte;
+    err:
+    // TODO free ?
+    return NULL;
+}
+
+int set_peer_info(context_t *ctx, uint32_t router_id, int key, void *value, int len) {
+    // TODO. Not handled yet
+    return -1;
 }

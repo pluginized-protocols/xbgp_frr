@@ -270,6 +270,7 @@ typedef enum {
 struct bpacket_attr_vec_arr;
 
 /* Prototypes. */
+extern int set_ubpf_cluster_list(struct path_attribute *ubpf_attr, struct attr *host_attr);
 extern void bgp_attr_init(void);
 extern void bgp_attr_finish(void);
 extern bgp_attr_parse_ret_t bgp_attr_parse(struct peer *, struct attr *,

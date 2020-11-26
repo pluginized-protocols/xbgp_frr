@@ -1672,6 +1672,14 @@ bgp_attr_cluster_list(struct bgp_attr_parser_args *args)
 	return BGP_ATTR_PARSE_PROCEED;
 }
 
+int set_ubpf_cluster_list(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    if (ubpf_attr->code != BGP_ATTR_CLUSTER_LIST) {
+        return -1;
+    }
+    host_attr->cluster = cluster_parse((struct in_addr *)ubpf_attr->data, ubpf_attr->length);
+    return 0;
+}
+
 /* Multiprotocol reachability information parse. */
 int bgp_mp_reach_parse(struct bgp_attr_parser_args *args,
 		       struct bgp_nlri *mp_update)
@@ -3709,9 +3717,8 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
         while(next_mempool_iterator(it)) {
 
             plug_attr = next_mempool_iterator(it);
-
             entry_args_t attr_args[] = {
-                    {.arg = plug_attr, .len=sizeof(struct ubpf_attr), .kind= kind_hidden, .type=ATTRIBUTE},
+                    {.arg = plug_attr, .len=sizeof(struct path_attribute), .kind= kind_hidden, .type=ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                     {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                     {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},

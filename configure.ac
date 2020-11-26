@@ -2392,11 +2392,18 @@ AS_IF([test "x$with_pkg_git_version" = "xyes"], [
 
 AC_ARG_VAR([UBPF_LIB], [Location of libubpf])
 AC_ARG_VAR([UBPF_INC], [Header loctation of libubpf])
+AC_ARG_VAR([XBGP_INC], [Headers to make FRRouting xBGP compilant])
 
 ac_cflags_save="$CFLAGS"
 CFLAGS="$CFLAGS -I$UBPF_INC"
 AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
 UBPF_INC="$CFLAGS"
+CFLAGS="$ac_cflags_save"
+
+ac_cflags_save="$CFLAGS"
+CFLAGS="$CFLAGS -I$XBGP_INC"
+AC_CHECK_HEADER(["xbgp_complant_api/xbgp_api_vars.h"], [], [xBGP compliant api headers not found])
+UBPF_INC="-I$XBGP_INC $UBPF_INC"
 CFLAGS="$ac_cflags_save"
 
 AC_SEARCH_LIBS([sqrt], [m], [], [AC_MSG_ERROR([math library not found)])])

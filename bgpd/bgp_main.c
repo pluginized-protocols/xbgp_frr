@@ -63,32 +63,11 @@
 #include "bgpd/bgp_network.h"
 #include "bgpd/bgp_errors.h"
 #include "bgp_ubpf.h"
+#include <xbgp_compliant_api/xbgp_api_vars.h>
 
 #ifdef ENABLE_BGP_VNC
 #include "bgpd/rfapi/rfapi_backend.h"
 #endif
-
-static proto_ext_fun_t api_proto[] = {
-        {.name = "add_attr", .fn = add_attr},
-        {.name = "get_attr", .fn = get_attr},
-        {.name = "set_attr", .fn = set_attr},
-        {.name = "get_attr_by_code_from_rte", .fn = get_attr_by_code_from_rte},
-        {.name = "write_to_buffer", .fn = write_to_buffer},
-        {.name = "get_peer_info", .fn = get_peer_info},
-        {.name = "get_src_peer_info", .fn = get_src_peer_info},
-        {.name = "get_attr_from_code", .fn = get_attr_from_code},
-        {.name = "get_prefix", .fn = get_prefix},
-        proto_ext_func_null
-};
-
-static insertion_point_info_t plugin_info[] = {
-        {.insertion_point_str = "bgp_encode_attr", .insertion_point_id = BGP_ENCODE_ATTR},
-        {.insertion_point_str = "bgp_decode_attr", .insertion_point_id = BGP_DECODE_ATTR},
-        {.insertion_point_str = "bgp_med_decision", .insertion_point_id = BGP_MED_DECISION},
-        {.insertion_point_str = "bgp_pre_inbound_filter", .insertion_point_id = BGP_PRE_INBOUND_FILTER},
-        {.insertion_point_str = "bgp_pre_outbound_filter", .insertion_point_id = BGP_PRE_OUTBOUND_FILTER},
-        insertion_point_info_null
-};
 
 /* bgpd options, we use GNU getopt library. */
 static const struct option longopts[] = {
@@ -103,6 +82,7 @@ static const struct option longopts[] = {
 	{"json_manifest", required_argument, NULL, 'w'},
 	{"vm_var_state", required_argument, NULL, 'x'},
 	{"plugin_folder", required_argument, NULL, 'y'},
+	{"extra_conf", required_argument, NULL, 'a'},
 	{0}};
 
 /* signal definitions */
@@ -582,12 +562,12 @@ int main(int argc, char **argv)
 	}
 
 
-	if (init_plugin_manager(api_proto, state_dir, strnlen(state_dir, 256), plugin_info,
+	if (init_plugin_manager(api_funcs, state_dir, strnlen(state_dir, 256), insertion_points,
 			    NULL, NULL, 0) != 0) {
 		exit(EXIT_FAILURE);
 	}
 
-	if (load_extension_code(json_conf, plugin_dir, api_proto, plugin_info) != 0) {
+	if (load_extension_code(json_conf, plugin_dir, api_funcs, insertion_points) != 0) {
 		exit(EXIT_FAILURE);
 	}
 

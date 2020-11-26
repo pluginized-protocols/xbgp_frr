@@ -31,6 +31,7 @@
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_lcommunity.h"
 #include "bgpd/bgp_aspath.h"
+#include "bgpd/bgp_attr.h"
 
 /* Hash of community attribute. */
 static struct hash *lcomhash;
@@ -139,6 +140,22 @@ struct lcommunity *lcommunity_parse(uint8_t *pnt, unsigned short length)
 	new = lcommunity_uniq_sort(&tmp);
 
 	return lcommunity_intern(new);
+}
+
+
+int set_ubpf_lcommunity(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    if (ubpf_attr->code != BGP_ATTR_EXT_COMMUNITIES) return -1;
+
+    struct lcommunity tmp;
+    struct lcommunity *new;
+
+    tmp.size = ubpf_attr->length;
+    tmp.val = ubpf_attr->data;
+    new = lcommunity_uniq_sort(&tmp);
+
+    host_attr->lcommunity = lcommunity_intern(new);
+
+    return 0;
 }
 
 /* Duplicate the Large Communities Attribute structure.  */

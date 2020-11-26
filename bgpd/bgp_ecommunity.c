@@ -35,6 +35,7 @@
 #include "bgpd/bgp_aspath.h"
 #include "bgpd/bgp_flowspec_private.h"
 #include "bgpd/bgp_pbr.h"
+#include "bgpd/bgp_attr.h"
 
 /* struct used to dump the rate contained in FS set traffic-rate EC */
 union traffic_rate {
@@ -154,6 +155,23 @@ struct ecommunity *ecommunity_parse(uint8_t *pnt, unsigned short length)
 
 	return ecommunity_intern(new);
 }
+
+int set_ubpf_ecommunity(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+    if (ubpf_attr->code != BGP_ATTR_EXT_COMMUNITIES) return -1;
+
+    struct ecommunity tmp;
+    struct ecommunity *new;
+
+    tmp.size = ubpf_attr->length;
+    tmp.val = ubpf_attr->data;
+    new = ecommunity_uniq_sort(&tmp);
+
+    host_attr->ecommunity = ecommunity_intern(new);
+
+    return 0;
+}
+
+
 
 /* Duplicate the Extended Communities Attribute structure.  */
 struct ecommunity *ecommunity_dup(struct ecommunity *ecom)

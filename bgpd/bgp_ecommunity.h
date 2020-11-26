@@ -23,6 +23,7 @@
 
 #include "bgpd/bgp_route.h"
 #include "bgpd/bgpd.h"
+#include <xbgp_compliant_api/xbgp_defs.h>
 
 /* High-order octet of the Extended Communities type field.  */
 #define ECOMMUNITY_ENCODE_AS                0x00
@@ -150,6 +151,7 @@ static inline void encode_route_target_as4(as_t as, uint16_t val,
 	eval->val[7] = val & 0xff;
 }
 
+extern int set_ubpf_ecommunity(struct path_attribute *ubpf_attr, struct attr *host_attr);
 extern void ecommunity_init(void);
 extern void ecommunity_finish(void);
 extern void ecommunity_free(struct ecommunity **);

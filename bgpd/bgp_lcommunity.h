@@ -23,6 +23,7 @@
 
 #include "lib/json.h"
 #include "bgpd/bgp_route.h"
+#include <xbgp_compliant_api/xbgp_defs.h>
 
 /* Large Communities value is twelve octets long.  */
 #define LCOMMUNITY_SIZE                        12
@@ -52,6 +53,8 @@ struct lcommunity_val {
 
 #define lcom_length(X)    ((X)->size * LCOMMUNITY_SIZE)
 
+
+extern int set_ubpf_lcommunity(struct path_attribute *ubpf_attr, struct attr *host_attr);
 extern void lcommunity_init(void);
 extern void lcommunity_finish(void);
 extern void lcommunity_free(struct lcommunity **);

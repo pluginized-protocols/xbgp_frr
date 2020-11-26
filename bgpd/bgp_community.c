@@ -27,6 +27,8 @@
 
 #include "bgpd/bgp_memory.h"
 #include "bgpd/bgp_community.h"
+#include <xbgp_compliant_api/xbgp_defs.h>
+#include "bgpd/bgp_attr.h"
 
 /* Hash of community attribute. */
 static struct hash *comhash;
@@ -526,6 +528,20 @@ struct community *community_parse(uint32_t *pnt, unsigned short length)
 	new = community_uniq_sort(&tmp);
 
 	return community_intern(new);
+}
+
+int set_ubpf_community(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+
+    struct community tmp;
+    struct community *new;
+
+    tmp.size = ubpf_attr->length % 4;
+    tmp.val = (uint32_t *) ubpf_attr->data;
+
+    new = community_uniq_sort(&tmp);
+
+    host_attr->community = community_intern(new);
+    return 0;
 }
 
 struct community *community_dup(struct community *com)

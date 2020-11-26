@@ -36,6 +36,7 @@
 #include "bgpd/bgp_debug.h"
 #include "bgpd/bgp_attr.h"
 #include "bgpd/bgp_errors.h"
+#include <xbgp_compliant_api/xbgp_defs.h>
 
 /* Attr. Flags and Attr. Type Code. */
 #define AS_HEADER_SIZE 2
@@ -857,6 +858,58 @@ struct aspath *aspath_parse(struct stream *s, size_t length, int use32bit)
 	find->refcnt++;
 
 	return find;
+}
+
+
+int ubpf_set_aspath(struct path_attribute *ubpf_attr, struct attr *host_attr, int as4n) {
+    if (ubpf_attr->code != BGP_ATTR_AS_PATH && ubpf_attr->code != BGP_ATTR_AS4_PATH) {
+        return -1;
+    }
+
+    struct assegment *seg, *prev, *head;
+    struct assegment *aspath;
+    struct aspath as, *find;
+    int i;
+    uint8_t *offset;
+    offset = ubpf_attr->data;
+    uint8_t seg_type, seg_length;
+
+    prev = head = NULL;
+    while (offset - ubpf_attr->data < ubpf_attr->length) {
+        seg_type = *offset++;
+        seg_length = *offset++;
+        seg = assegment_new(seg_type, seg_length);
+
+        if (head) {
+            prev->next = seg;
+        } else {
+            head = prev = seg;
+        }
+
+        for(i = 0; i < seg_length; i++) {
+            seg->as[i] = as4n ? *((uint32_t *) offset) : *((uint16_t *) offset);
+            offset += as4n ? 4 : 2;
+        }
+        prev = seg;
+    }
+
+    aspath = assegment_normalise(head);
+    as.segments = aspath;
+    find = hash_get(ashash, &as, aspath_hash_alloc);
+
+    if (find->refcnt) {
+        assegment_free_all(as.segments);
+        /* aspath_key_make() always updates the string */
+        XFREE(MTYPE_AS_STR, as.str);
+        if (as.json) {
+            json_object_free(as.json);
+            as.json = NULL;
+        }
+    }
+
+    find->refcnt++;
+    host_attr->aspath = find;
+    return 0;
 }
 
 static void assegment_data_put(struct stream *s, as_t *as, int num,

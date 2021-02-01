@@ -747,8 +747,8 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 
 	/* 6. MED check. */
 	entry_args_t args[] = {
-            {.arg = new, .len= sizeof(struct bgp_path_info), .kind=kind_hidden, .type=BGP_ROUTE},
-            {.arg = exist, .len = sizeof(struct bgp_path_info), .kind=kind_hidden, .type=BGP_ROUTE},
+            {.arg = new, .len= sizeof(struct bgp_path_info), .kind=kind_hidden, .type=ARG_BGP_ROUTE_NEW},
+            {.arg = exist, .len = sizeof(struct bgp_path_info), .kind=kind_hidden, .type=ARG_BGP_ROUTE_OLD},
             entry_arg_null,
 	};
     CALL_REPLACE_ONLY(BGP_MED_DECISION, args, ret_val_rte_decision, {
@@ -1602,9 +1602,9 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
             {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
             {.arg = peers, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO},
             {.arg = &subgrp->peer_count, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO_COUNT},
-            {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
-            {.arg = piattr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
-            {.arg = pi, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = RIB_ROUTE},
+            {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_PREFIX},
+            {.arg = piattr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            {.arg = pi, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ROUTE_RIB},
             entry_arg_null,
 	};
 
@@ -3132,8 +3132,8 @@ int bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 
 	entry_args_t args[] = {
             {.arg = peer, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
-            {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ATTRIBUTE_LIST},
-            {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PREFIX},
+            {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_PREFIX},
             entry_arg_null,
 	};
 	CALL_REPLACE_ONLY(BGP_PRE_INBOUND_FILTER, args, ret_val_bgp_filter, {

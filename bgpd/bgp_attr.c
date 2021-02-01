@@ -2696,12 +2696,12 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
 			goto done;
 		}
         entry_args_t args[] = {
-                [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = UNSIGNED_INT},
-                [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = UNSIGNED_INT},
-                [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = BUFFER_ARRAY},
-                [3] = {.arg = &attr_args.length, .len = sizeof(uint16_t), .kind=kind_primitive, .type = UNSIGNED_INT},
+                [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = ARG_CODE},
+                [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = ARG_FLAGS},
+                [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = ARG_DATA},
+                [3] = {.arg = &attr_args.length, .len = sizeof(uint16_t), .kind=kind_primitive, .type = ARG_LENGTH},
                 [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
-                [5] = {.arg = attr, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=ATTRIBUTE_LIST},
+                [5] = {.arg = attr, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE_LIST},
                 [6] = {.arg = peer, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=PEER_SRC},
                 entry_arg_null,
         };
@@ -3718,7 +3718,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 
             plug_attr = next_mempool_iterator(it);
             entry_args_t attr_args[] = {
-                    {.arg = plug_attr, .len=sizeof(struct path_attribute), .kind= kind_hidden, .type=ATTRIBUTE},
+                    {.arg = plug_attr, .len=sizeof(struct path_attribute), .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                     {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                     {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},

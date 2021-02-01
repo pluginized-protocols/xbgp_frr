@@ -318,7 +318,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     struct attr *frr_attr;
     mem_pool *mp;
 
-    frr_attr = get_arg_from_type(ctx, ATTRIBUTE_LIST);
+    frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!frr_attr) return -1;
     mp = frr_attr->ubpf_mempool;
 
@@ -350,7 +350,7 @@ struct path_attribute *get_attr(context_t *ctx) {
     struct path_attribute *frr_attr;
     size_t tot_len;
 
-    frr_attr = get_arg_from_type(ctx, ATTRIBUTE);
+    frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE);
     if (!frr_attr) return NULL;
 
     tot_len = sizeof(struct path_attribute) + frr_attr->length;
@@ -450,12 +450,12 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
     mempool_attr = NULL;
 
     switch (args_rte) {
-        case BGP_ROUTE_NEW:
-        case BGP_ROUTE_OLD:
-        case BGP_ROUTE:
+        case ARG_BGP_ROUTE_NEW:
+        case ARG_BGP_ROUTE_OLD:
+        case ARG_BGP_ROUTE:
             frr_attr = ((struct bgp_path_info *) get_arg_from_type(ctx, args_rte))->attr;
             break;
-        case ATTRIBUTE:
+        case ARG_BGP_ATTRIBUTE:
             frr_attr = get_arg_from_type(ctx, args_rte);
             break;
         default:
@@ -483,7 +483,7 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
 
 
 struct path_attribute *get_attr_from_code(context_t *ctx, uint8_t code) {
-    return get_attr_by_code__(ctx, code, ATTRIBUTE_LIST);
+    return get_attr_by_code__(ctx, code, ARG_BGP_ATTRIBUTE_LIST);
 }
 
 struct path_attribute *get_attr_from_code_by_route(context_t *ctx, uint8_t code, int rte) {
@@ -492,13 +492,13 @@ struct path_attribute *get_attr_from_code_by_route(context_t *ctx, uint8_t code,
 
     switch (rte) {
         case BGP_ROUTE_TYPE_NEW:
-            rte_to_internal_id = BGP_ROUTE_NEW;
+            rte_to_internal_id = ARG_BGP_ROUTE_NEW;
             break;
         case BGP_ROUTE_TYPE_OLD:
-            rte_to_internal_id = BGP_ROUTE_OLD;
+            rte_to_internal_id = ARG_BGP_ROUTE_OLD;
             break;
         case BGP_ROUTE_TYPE_UNDEF:
-            rte_to_internal_id = BGP_ROUTE;
+            rte_to_internal_id = ARG_BGP_ROUTE;
             break;
         default:
             return NULL;
@@ -611,7 +611,7 @@ struct ubpf_prefix *get_prefix(context_t *ctx) {
     struct prefix *frr_pfx;
     struct ubpf_prefix *ubpf_pfx;
 
-    frr_pfx = get_arg_from_type(ctx, PREFIX);
+    frr_pfx = get_arg_from_type(ctx, ARG_BGP_PREFIX);
     ubpf_pfx = ctx_malloc(ctx, sizeof(*ubpf_pfx));
     if (!frr_pfx) {
         fprintf(stderr, "Can't get FRR prefix\n");
@@ -627,7 +627,7 @@ struct ubpf_prefix *get_prefix(context_t *ctx) {
 struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
     struct bgp_path_info *pi;
     struct ubpf_nexthop *nexthop;
-    pi = get_arg_from_type(ctx, RIB_ROUTE);
+    pi = get_arg_from_type(ctx, ARG_BGP_ROUTE_RIB);
     if (!pi) return NULL;
 
     nexthop = ctx_malloc(ctx, sizeof(*nexthop));
@@ -676,7 +676,7 @@ struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
     int i, nb_attrs;
 
     memset(set_attr, 0, sizeof(set_attr));
-    pi = get_arg_from_type(ctx, BGP_ROUTE);
+    pi = get_arg_from_type(ctx, ARG_BGP_ROUTE);
     if (!pi) return NULL;
 
     nb_attrs = get_set_attrs(pi->attr, set_attr, sizeof(set_attr) / sizeof(set_attr[0]));

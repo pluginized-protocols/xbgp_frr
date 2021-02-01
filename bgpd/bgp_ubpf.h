@@ -11,16 +11,10 @@
 #define MAX_BUF_LEN 4096
 
 enum type {
-    TYPE_NULL = 0,
+    TYPE_NULL = ARG_MAX_OPAQUE,
     INTEGER,
-    BGP_ROUTE,
-    BGP_ROUTE_NEW,
-    BGP_ROUTE_OLD,
-    UNSIGNED_INT,
     MEMPOOL,
     BYTE_ARRAY,
-    ATTRIBUTE_LIST,
-    ATTRIBUTE,
     PARSE_STATE,
     WRITE_STATE,
     BUFFER_ARRAY,
@@ -30,8 +24,6 @@ enum type {
     PEER_TO,
     PEERS_TO, // update group may concern multiple routers
     PEERS_TO_COUNT,
-    PREFIX,
-    RIB_ROUTE,
 };
 
 

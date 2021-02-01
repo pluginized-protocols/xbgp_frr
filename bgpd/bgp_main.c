@@ -563,7 +563,7 @@ int main(int argc, char **argv)
 
 
 	if (init_plugin_manager(api_funcs, state_dir, strnlen(state_dir, 256), insertion_points,
-			    NULL, NULL, 0) != 0) {
+			    0, NULL) != 0) {
 		exit(EXIT_FAILURE);
 	}
 

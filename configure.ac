@@ -618,22 +618,26 @@ AC_ARG_WITH([plugin_manifest],
 AC_ARG_WITH([plugin_extra_conf],
   AS_HELP_STRING([--plugin-extra-conf=ARG], [Change the default path to the manifest that configure extra parameters for plugins. Default is ${sysconfdir}/plugins/extra_conf.json]))
 
-if [ -z "$plugin_folder" ]; then
+for I in 1 2 3 4 5 6 7 8 9 10; do
+  	eval xbgp_frr__var="\"$sysconfdir\""
+done
+
+if [[ -z "$plugin_folder" ]]; then
+  AC_SUBST([PLUGIN_FOLDER], ["${xbgp_frr__var}"/plugins])
+else
   AC_SUBST([PLUGIN_FOLDER], [${plugin_folder}])
-else
-  AC_SUBST([PLUGIN_FOLDER], ["${sysconfdir}"/plugins])
 fi
 
-if [ -z "$plugin_manifest" ]; then
+if [[ -z "$plugin_manifest" ]]; then
+   AC_SUBST([PLUGIN_MANIFEST], ["${xbgp_frr__var}"/plugins/manifest.conf])
+else
   AC_SUBST([PLUGIN_MANIFEST], [${plugin_manifest}])
-else
-  AC_SUBST([PLUGIN_MANIFEST], ["${sysconfdir}"/plugins/manifest.conf])
 fi
 
-if [ -z "$plugin_extra_conf" ]; then
-  AC_SUBST([PLUGIN_EXTRA_CONF], [${plugin_extra_conf}], [Default path to the plugin folder])
+if [[ -z "$plugin_extra_conf" ]]; then
+  AC_SUBST([PLUGIN_EXTRA_CONF], ["${xbgp_frr__var}"/plugins/extra_conf.json])
 else
-  AC_SUBST([PLUGIN_EXTRA_CONF], ["${sysconfdir}"/plugins/extra_conf.json])
+  AC_SUBST([PLUGIN_EXTRA_CONF], [${plugin_extra_conf}], [Default path to the plugin folder])
 fi
 
 
@@ -2189,6 +2193,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([FRR_INCLUDES [
 #endif
 #ifdef HAVE_MALLOC_MALLOC_H
 #include <malloc/malloc.h>
+#include <malloc/malloc.h>
 #endif
 ]], [[
 size_t ac_x; ac_x = malloc_usable_size(NULL);
@@ -2397,13 +2402,10 @@ AC_ARG_VAR([XBGP_INC], [Headers to make FRRouting xBGP compilant])
 ac_cflags_save="$CFLAGS"
 CFLAGS="$CFLAGS -I$UBPF_INC"
 AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
-UBPF_INC="$CFLAGS"
-CFLAGS="$ac_cflags_save"
-
-ac_cflags_save="$CFLAGS"
+#xbgp requires ubpf_plubic.h
 CFLAGS="$CFLAGS -I$XBGP_INC"
-AC_CHECK_HEADER(["xbgp_complant_api/xbgp_api_vars.h"], [], [xBGP compliant api headers not found])
-UBPF_INC="-I$XBGP_INC $UBPF_INC"
+AC_CHECK_HEADER(["xbgp_compliant_api/xbgp_api_vars.h"], [], [AC_MSG_ERROR([xBGP compliant api headers not found])])
+UBPF_INC="$CFLAGS"
 CFLAGS="$ac_cflags_save"
 
 AC_SEARCH_LIBS([sqrt], [m], [], [AC_MSG_ERROR([math library not found)])])

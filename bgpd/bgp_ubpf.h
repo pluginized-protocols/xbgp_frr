@@ -41,7 +41,13 @@ enum type {
 })
 
 static inline int check_arg_decode(uint64_t ret_val) {
-    return ret_val == EXIT_FAILURE ? 0 : 1;
+    switch (ret_val) {
+        case PLUGIN_FILTER_REJECT:
+        case EXIT_SUCCESS:
+            return 1;
+        default:
+            return 0;
+    }
 }
 
 static inline int ret_val_check_encode_attr(uint64_t val) {

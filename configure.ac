@@ -2401,7 +2401,7 @@ AC_ARG_VAR([XBGP_INC], [Headers to make FRRouting xBGP compilant])
 
 ac_cflags_save="$CFLAGS"
 CFLAGS="$CFLAGS -I$UBPF_INC"
-AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use HUBPF to tell its location)])])
+AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use UBPF_INC to tell its location)])])
 #xbgp requires ubpf_plubic.h
 CFLAGS="$CFLAGS -I$XBGP_INC"
 AC_CHECK_HEADER(["xbgp_compliant_api/xbgp_api_vars.h"], [], [AC_MSG_ERROR([xBGP compliant api headers not found])])

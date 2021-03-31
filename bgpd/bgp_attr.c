@@ -2781,7 +2781,12 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
             // on success, the attribute is successfully read
             // advance stream offset
             stream_forward_getp(BGP_INPUT(peer), length);
-            ret = BGP_ATTR_PARSE_PROCEED;
+            if (VM_RETURN_VALUE == PLUGIN_FILTER_REJECT) {
+                ret = BGP_ATTR_PARSE_WITHDRAW;
+                goto done;
+            } else {
+                ret = BGP_ATTR_PARSE_PROCEED;
+            }
         })
 
 		if (ret == BGP_ATTR_PARSE_ERROR_NOTIFYPLS) {

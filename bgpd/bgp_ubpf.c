@@ -314,17 +314,28 @@ static inline int ubpf_to_frr_attr(struct attr *frr_attr, struct path_attribute 
 
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
 
-    struct path_attribute attr;
+    struct path_attribute *attr;
     struct attr *frr_attr;
     mem_pool *mp;
 
     frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!frr_attr) return -1;
-    mp = frr_attr->ubpf_mempool;
 
-    attr.flags = flags;
-    attr.code = code;
-    attr.length = length;
+
+    mp = frr_attr->ubpf_mempool;
+    // we first remove any value associated to this
+    // attribute as it will be overridden by the one
+    // computed by the plugin
+    remove_mempool(mp, code);
+
+    attr = malloc(sizeof(*attr) + length);
+    if (!attr) {
+        return -1;
+    }
+
+    attr->flags = flags;
+    attr->code = code;
+    attr->length = length;
 
     if (!mp) {
         return -1;
@@ -333,11 +344,14 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     // if the attribute is decoded by one plugin on DECODE side
     // there must be a plugin to decode it on ENCODE side.
     // the attribute is not handled by FRRouting anymore !
-    memcpy(attr.data, decoded_attr, length);
+    memcpy(attr->data, decoded_attr, length);
 
-    if (add_mempool(mp, code, NULL, sizeof(struct path_attribute) + attr.length, &attr, 0) != 0)
+    if (add_mempool(mp, code, NULL, sizeof(struct path_attribute) + attr->length, attr, 0) != 0) {
+        free(attr);
         return -1;
+    }
 
+    free(attr);
     return 0;
 }
 

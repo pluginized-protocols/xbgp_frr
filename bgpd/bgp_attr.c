@@ -3716,14 +3716,14 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 	}
 
 	mempool_iterator *it = new_mempool_iterator(attr->ubpf_mempool);
-	struct ubpf_attr *plug_attr;
+	struct path_attribute *plug_attr;
 	int my_one = 1;
 	if (it) {
-        while(next_mempool_iterator(it)) {
+        while(mempool_hasnext(it)) {
 
             plug_attr = next_mempool_iterator(it);
             entry_args_t attr_args[] = {
-                    {.arg = plug_attr, .len=sizeof(struct path_attribute), .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
+                    {.arg = plug_attr, .len=sizeof(struct path_attribute) + plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                     {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                     {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},

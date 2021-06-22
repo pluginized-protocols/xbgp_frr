@@ -368,7 +368,7 @@ struct path_attribute *get_attr(context_t *ctx) {
     if (!frr_attr) return NULL;
 
     tot_len = sizeof(struct path_attribute) + frr_attr->length;
-    ubpf_attr = ctx_malloc(ctx, tot_len);
+    ubpf_attr = __ctx_malloc(ctx, tot_len);
     if (!ubpf_attr) return NULL;
 
     memcpy(ubpf_attr, frr_attr, tot_len);
@@ -441,7 +441,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
             return NULL; //not handled !
     }
 
-    attr = ctx_malloc(ctx, sizeof(struct path_attribute) + data_attr_len);
+    attr = __ctx_malloc(ctx, sizeof(struct path_attribute) + data_attr_len);
     if (!attr) goto err;
 
     attr->code = code;
@@ -485,7 +485,7 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
     }
 
     if (mempool_attr) {
-        ret_attr = ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
+        ret_attr = __ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
         if (!ret_attr) return NULL;
         memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
         return ret_attr;
@@ -554,8 +554,8 @@ static struct ubpf_peer_info *ubpf_peer_info_(context_t *ctx, int which_peer) {
     struct ubpf_peer_info *pinfo, *local_pinfo;
     if (!peer) return NULL;
 
-    pinfo = ctx_malloc(ctx, sizeof(*pinfo));
-    local_pinfo = ctx_malloc(ctx, sizeof(*local_pinfo));
+    pinfo = __ctx_malloc(ctx, sizeof(*pinfo));
+    local_pinfo = __ctx_malloc(ctx, sizeof(*local_pinfo));
 
     if (!pinfo || !local_pinfo) return NULL;
 
@@ -581,8 +581,8 @@ struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers) { // array o
         return NULL;
     }
 
-    ubpf_peers = ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
-    local_sessions = ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
+    ubpf_peers = __ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
+    local_sessions = __ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
     if (!ubpf_peers || !local_sessions) return NULL;
 
     for (i = 0; i < *peer_count; i++) {
@@ -626,7 +626,7 @@ struct ubpf_prefix *get_prefix(context_t *ctx) {
     struct ubpf_prefix *ubpf_pfx;
 
     frr_pfx = get_arg_from_type(ctx, ARG_BGP_PREFIX);
-    ubpf_pfx = ctx_malloc(ctx, sizeof(*ubpf_pfx));
+    ubpf_pfx = __ctx_malloc(ctx, sizeof(*ubpf_pfx));
     if (!frr_pfx) {
         fprintf(stderr, "Can't get FRR prefix\n");
         return NULL;
@@ -644,7 +644,7 @@ struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
     pi = get_arg_from_type(ctx, ARG_BGP_ROUTE_RIB);
     if (!pi) return NULL;
 
-    nexthop = ctx_malloc(ctx, sizeof(*nexthop));
+    nexthop = __ctx_malloc(ctx, sizeof(*nexthop));
 
     if (!nexthop) return NULL;
 
@@ -698,13 +698,13 @@ struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
         return NULL;
     }
 
-    rte = ctx_malloc(ctx, sizeof(*rte));
+    rte = __ctx_malloc(ctx, sizeof(*rte));
     if (!rte) return NULL;
 
     rte->attr_nb = nb_attrs;
-    rte->attr = ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
+    rte->attr = __ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
     if (!rte->attr) goto err;
-    rte->peer_info = ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
+    rte->peer_info = __ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
 
 
     for (i = 0; i < nb_attrs; i++) {

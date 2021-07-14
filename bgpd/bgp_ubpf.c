@@ -610,13 +610,32 @@ static int frr_prefix_to_ubpf(struct prefix *frr_pfx, struct ubpf_prefix *ubpf_p
         case AF_INET6:
             ubpf_pfx->afi = XBGP_AFI_IPV6;
             ubpf_pfx->safi = XBGP_SAFI_UNICAST;
-            memcpy(ubpf_pfx->u, &frr_pfx->u.prefix4, sizeof(frr_pfx->u.prefix6));
+            memcpy(ubpf_pfx->u, &frr_pfx->u.prefix6, sizeof(frr_pfx->u.prefix6));
             break;
         default:
             // not handled
             return -1;
     }
 
+    return 0;
+}
+
+static inline int ubpf_prefix_to_frr(struct ubpf_prefix *pfx, struct prefix *frr_pfx) {
+    memset(frr_pfx, 0, sizeof(*frr_pfx));
+    frr_pfx->prefixlen = pfx->prefixlen;
+
+    switch (pfx->afi) {
+        case XBGP_AFI_IPV4:
+            frr_pfx->family = AF_INET;
+            memcpy(&frr_pfx->u.prefix4, pfx->u, sizeof(frr_pfx->u.prefix4));
+            break;
+        case XBGP_AFI_IPV6:
+            frr_pfx->family = AF_INET6;
+            memcpy(&frr_pfx->u.prefix6, pfx->u, sizeof(frr_pfx->u.prefix6));
+            break;
+        default:
+            return -1;
+    }
     return 0;
 }
 
@@ -738,8 +757,8 @@ int new_rib_iterator(context_t *ctx, int afi, int safi) {
     int i;
     struct bgp *bgp;
     bgp_table_iter_t iter;
-    bgp = bgp_get_default();
 
+    bgp = bgp_get_default();
     if (!bgp) return -1;
 
     bgp_table_iter_init(&iter, bgp->rib[afi][safi]);
@@ -759,12 +778,20 @@ int new_rib_iterator(context_t *ctx, int afi, int safi) {
 }
 
 
-static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct prefix *p, struct bgp_route *rte) {
+static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct prefix *p, struct bgp_route **rte_) {
     short set_attr[30];
     int nb_attrs;
     int i;
     struct path_attribute *pattr;
+    struct bgp_route *rte;
 
+    if (pi == NULL) {
+        fprintf(stderr, "pi null\n");
+        goto err;
+    } if (p == NULL) {
+        fprintf(stderr, "p null\n");
+        goto err;
+    }
 
     nb_attrs = get_set_attrs(pi->attr, set_attr, sizeof(set_attr) / sizeof(set_attr[0]));
     if (nb_attrs == -1) {
@@ -772,16 +799,18 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
     }
 
     rte = __ctx_malloc(ctx, sizeof(*rte));
-    memset(rte, 0, sizeof(*rte));
     if (!rte) goto err;
+    memset(rte, 0, sizeof(*rte));
+    *rte_ = rte;
 
     frr_prefix_to_ubpf(p, &rte->pfx);
     rte->attr_nb = nb_attrs;
 
     rte->attr = __ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
     if (!rte->attr) goto err;
-    rte->peer_info = __ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
 
+    rte->peer_info = __ctx_calloc(ctx, 1, sizeof(struct ubpf_peer_info));
+    if (!rte->peer_info) goto err;
 
     for (i = 0; i < nb_attrs; i++) {
         pattr = frr_to_ubpf_attr(ctx, set_attr[i], pi->attr);
@@ -791,7 +820,7 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
 
     fill_peer_info(rte->peer_info, pi->peer, 0);
     rte->type = pi->type;
-    rte->uptime = pi->uptime;
+    rte->uptime = bgp_clock() - pi->uptime; // TODO TEST !
     return 0;
 
     err:
@@ -814,10 +843,25 @@ struct bgp_route *next_rib_route(context_t *ctx, unsigned int iterator_id) {
         return NULL;
     }
 
-    n = bgp_table_iter_next(it);
-    pi = n->info;
+    if (!rib_has_route(ctx, iterator_id)) {
+        return NULL;
+    }
 
-    if (bgp_rte_node_to_ubpf(ctx, pi, &n->p, rte) == -1) goto err;
+    n = bgp_table_iter_next(it);
+
+    for (; n; n = bgp_table_iter_next(it)) {
+        for (pi = bgp_node_get_bgp_path_info(n); pi; pi = pi->next) {
+            if (CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
+
+                (pi->type == ZEBRA_ROUTE_BGP
+                 && (pi->sub_type == BGP_ROUTE_NORMAL
+                     || pi->sub_type == BGP_ROUTE_IMPORTED))){
+
+                if (bgp_rte_node_to_ubpf(ctx, pi, &n->p, &rte) == -1) goto err;
+                return rte;
+            }
+        }
+    }
 
     err:
     return NULL;
@@ -830,9 +874,7 @@ int rib_has_route(context_t *ctx, unsigned int iterator_id) {
     it = iters[iterator_id];
     if (it == NULL) return 0;
 
-
-    return bgp_table_iter_is_done(it);
-
+    return !bgp_table_iter_is_done(it);
 }
 
 void rib_iterator_clean(context_t *ctx, unsigned int iterator_id) {
@@ -845,4 +887,68 @@ void rib_iterator_clean(context_t *ctx, unsigned int iterator_id) {
     bgp_table_iter_cleanup(it);
     free(it);
     iters[iterator_id] = NULL;
+}
+
+static int equal_addr(struct ubpf_peer_info *pinfo, union sockunion *frr_remote_socket) {
+    /* both family must be equal to compare their addresses */
+    if (frr_remote_socket->sa.sa_family != pinfo->addr.af) return 0;
+
+    switch (pinfo->addr.af) {
+        case AF_INET:
+            return pinfo->addr.addr.in.s_addr == frr_remote_socket->sin.sin_addr.s_addr;
+        case AF_INET6:
+            return memcmp(&pinfo->addr.addr.in6, &frr_remote_socket->sin6.sin6_addr,
+                          sizeof(pinfo->addr.addr.in6)) == 0;
+        default:
+            return 0;
+    }
+}
+
+int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_peer_info *pinfo) {
+    struct bgp * bgp;
+    struct bgp_table *table;
+    struct prefix frr_pfx;
+    bgp = bgp_get_default();
+    int match = 0;
+
+    if (bgp) return -1;
+
+    table = bgp->rib[pfx->afi][pfx->safi];
+
+    struct list *matches = list_new();
+    matches->del = (void (*)(void *))bgp_unlock_node;
+
+    ubpf_prefix_to_frr(pfx, &frr_pfx);
+
+    bgp_table_range_lookup(table, &frr_pfx, pfx->prefixlen, matches);
+
+    /* search for peers that hold the route with pinfo */
+    struct bgp_node *bgp_node;
+    struct listnode *bgp_listnode;
+    struct bgp_path_info *bgp_path_info;
+
+    for (ALL_LIST_ELEMENTS_RO(matches, bgp_listnode, bgp_node)) {
+        bgp_path_info = bgp_node_get_bgp_path_info(bgp_node);
+        if (!bgp_path_info) continue;
+
+        if (pinfo->router_id != 0) {
+            if (pinfo->router_id == bgp_path_info->peer->remote_id.s_addr) {
+                match = 1;
+                break;
+            }
+        } else if (equal_addr(pinfo, bgp_path_info->peer->su_remote)) {
+            match = 1;
+            break;
+        }
+
+    }
+
+    /* then delete the route from rib */
+    if (match) {
+        /* handles the withdraw announce */
+        bgp_rib_remove(bgp_node, bgp_path_info, bgp_path_info->peer, pfx->afi, pfx->safi);
+    }
+
+    list_delete(&matches);
+    return 0;
 }

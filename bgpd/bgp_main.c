@@ -568,7 +568,8 @@ int main(int argc, char **argv)
 	}
 
 	if (load_extension_code(json_conf, plugin_dir, api_funcs, insertion_points) != 0) {
-		exit(EXIT_FAILURE);
+        fprintf(stderr, "Unable the load plugins");
+	    exit(EXIT_FAILURE);
 	}
 
     if (extra_info_from_json(plugin_extra_cnf, "conf") != 0){

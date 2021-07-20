@@ -445,7 +445,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
     if (!attr) goto err;
 
     attr->code = code;
-    attr->length = 0;
+    attr->length = data_attr_len;
     memcpy(attr->data, buf, data_attr_len);
     attr->flags = michel[code].flags;
     free(buf);
@@ -700,84 +700,6 @@ static int get_set_attrs(struct attr *attr, short *set_attr, size_t set_attr_len
     return nb_attrs;
 }
 
-struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
-
-    struct bgp_route *rte;
-    struct path_attribute *pattr;
-    struct bgp_path_info *pi;
-    short set_attr[30];
-    int i, nb_attrs;
-
-    memset(set_attr, 0, sizeof(set_attr));
-    pi = get_arg_from_type(ctx, ARG_BGP_ROUTE);
-    if (!pi) return NULL;
-
-    nb_attrs = get_set_attrs(pi->attr, set_attr, sizeof(set_attr) / sizeof(set_attr[0]));
-    if (nb_attrs == -1) {
-        return NULL;
-    }
-
-    rte = __ctx_malloc(ctx, sizeof(*rte));
-    if (!rte) return NULL;
-
-    rte->attr_nb = nb_attrs;
-    rte->attr = __ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
-    if (!rte->attr) goto err;
-    rte->peer_info = __ctx_malloc(ctx, sizeof(struct ubpf_peer_info));
-
-
-    for (i = 0; i < nb_attrs; i++) {
-        pattr = frr_to_ubpf_attr(ctx, set_attr[i], pi->attr);
-        if (pattr == NULL) return NULL;
-        rte->attr[i] = pattr;
-    }
-
-    fill_peer_info(rte->peer_info, pi->peer, 0);
-    rte->type = pi->type;
-    if (frr_prefix_to_ubpf(&pi->net->p, &rte->pfx) != 0) goto err;
-
-    return rte;
-    err:
-    // TODO free ?
-    return NULL;
-}
-
-int set_peer_info(context_t *ctx, uint32_t router_id, int key, void *value, int len) {
-    // TODO. Not handled yet
-    return -1;
-}
-
-
-#define MAX_ITER_ID 256
-static bgp_table_iter_t *iters[256] = {0};
-static int alloc_table_iter = -1;
-
-
-int new_rib_iterator(context_t *ctx, int afi, int safi) {
-    int i;
-    struct bgp *bgp;
-    bgp_table_iter_t iter;
-
-    bgp = bgp_get_default();
-    if (!bgp) return -1;
-
-    bgp_table_iter_init(&iter, bgp->rib[afi][safi]);
-
-    for (i = 0; i < MAX_ITER_ID; i++) {
-        alloc_table_iter = (alloc_table_iter + 1) % MAX_ITER_ID;
-        if (iters[alloc_table_iter] == NULL) {
-            iters[alloc_table_iter] = malloc(sizeof(*iters[alloc_table_iter]));
-            if (!iters[alloc_table_iter]) return -1;
-
-            memcpy(iters[alloc_table_iter], &iter, sizeof(iter));
-            return alloc_table_iter;
-        }
-    }
-
-    return -1;
-}
-
-
 static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct prefix *p, struct bgp_route **rte_) {
     short set_attr[30];
     int nb_attrs;
@@ -824,6 +746,72 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
     return 0;
 
     err:
+    return -1;
+}
+
+struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
+
+    struct bgp_route *rte;
+    struct path_attribute *pattr;
+    struct bgp_path_info *pi;
+    short set_attr[30];
+    int i, nb_attrs;
+
+    switch (type) {
+        case BGP_ROUTE_TYPE_NEW:
+            pi = get_arg_from_type(ctx, ARG_BGP_ROUTE_NEW);
+            break;
+        case BGP_ROUTE_TYPE_OLD:
+            pi = get_arg_from_type(ctx, ARG_BGP_ROUTE_OLD);
+            break;
+        case BGP_ROUTE_TYPE_UNDEF:
+            pi = get_arg_from_type(ctx, ARG_BGP_ROUTE);
+            break;
+        case BGP_ROUTE_TYPE_UNKNOWN:
+        case BGP_ROUTE_TYPE_FAIL:
+            return NULL;
+    }
+
+    if (!pi) return NULL;
+    memset(set_attr, 0, sizeof(set_attr));
+
+    if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) return NULL;
+
+    return rte;
+}
+
+int set_peer_info(context_t *ctx, uint32_t router_id, int key, void *value, int len) {
+    // TODO. Not handled yet
+    return -1;
+}
+
+
+#define MAX_ITER_ID 256
+static bgp_table_iter_t *iters[256] = {0};
+static int alloc_table_iter = -1;
+
+
+int new_rib_iterator(context_t *ctx, int afi, int safi) {
+    int i;
+    struct bgp *bgp;
+    bgp_table_iter_t iter;
+
+    bgp = bgp_get_default();
+    if (!bgp) return -1;
+
+    bgp_table_iter_init(&iter, bgp->rib[afi][safi]);
+
+    for (i = 0; i < MAX_ITER_ID; i++) {
+        alloc_table_iter = (alloc_table_iter + 1) % MAX_ITER_ID;
+        if (iters[alloc_table_iter] == NULL) {
+            iters[alloc_table_iter] = malloc(sizeof(*iters[alloc_table_iter]));
+            if (!iters[alloc_table_iter]) return -1;
+
+            memcpy(iters[alloc_table_iter], &iter, sizeof(iter));
+            return alloc_table_iter;
+        }
+    }
+
     return -1;
 }
 
@@ -950,5 +938,27 @@ int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_p
     }
 
     list_delete(&matches);
+    return 0;
+}
+
+
+int get_vrf(context_t *ctx, struct vrf_info *info) {
+    const char *vrf_name;
+    size_t vrf_name_len;
+    int *vrf_id;
+
+    if(!info) return -1;
+    vrf_id = get_arg_from_type(ctx, ARG_BGP_VRF);
+    if (vrf_id == NULL) return -1;
+
+    vrf_name = vrf_id_to_name(*vrf_id);
+    vrf_name_len = strnlen(vrf_name, IF_NAMESIZE);
+
+    if (strncmp(vrf_name, "n/a", MIN(4, vrf_name_len)) == 0) return -1;
+    if (info->str_len >= vrf_name_len) {
+        strncpy(info->name, vrf_name, vrf_name_len);
+    }
+    info->vrf_id = *vrf_id;
+
     return 0;
 }

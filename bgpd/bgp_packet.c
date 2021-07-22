@@ -124,7 +124,7 @@ int bgp_packet_set_size(struct stream *s)
  * Push a packet onto the beginning of the peer's output queue.
  * This function acquires the peer's write mutex before proceeding.
  */
-static void bgp_packet_add(struct peer *peer, struct stream *s)
+void bgp_packet_add(struct peer *peer, struct stream *s)
 {
 	frr_with_mutex(&peer->io_mtx) {
 		stream_fifo_push(peer->obuf, s);

@@ -63,6 +63,8 @@ extern int bgp_capability_receive(struct peer *, bgp_size_t);
 extern int bgp_nlri_parse(struct peer *, struct attr *, struct bgp_nlri *,
 			  int mp_withdraw);
 
+extern void bgp_packet_add(struct peer *peer, struct stream *s);
+
 extern void bgp_update_restarted_peers(struct peer *);
 extern void bgp_update_implicit_eors(struct peer *);
 extern void bgp_check_update_delay(struct bgp *);

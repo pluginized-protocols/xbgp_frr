@@ -14,6 +14,8 @@
 #include "bgp_lcommunity.h"
 #include "bgp_ecommunity.h"
 #include "bgp_ubpf.h"
+#include "bgp_io.h"
+#include "bgp_packet.h"
 
 static ssize_t conv_origin(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
     size_t required_size = sizeof(host_attr->origin);
@@ -960,5 +962,32 @@ int get_vrf(context_t *ctx, struct vrf_info *info) {
     }
     info->vrf_id = *vrf_id;
 
+    return 0;
+}
+
+
+static struct peer *bgp_find_peer__(const char *peer_str) {
+    union sockunion su;
+    return str2sockunion(peer_str, &su) ? NULL : peer_lookup(NULL, &su);
+}
+
+
+int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, const char *peer_ip) {
+    struct stream *s;
+    struct peer *peer;
+
+    peer = bgp_find_peer__(peer_ip);
+
+    if (!peer) return -1;
+    if (!message->buf || message->buf_len <= 0) return -1;
+
+    s = stream_new(BGP_MAX_PACKET_SIZE);
+
+    bgp_packet_set_marker(s, type);
+    stream_put(s, message->buf, message->buf_len);
+    bgp_packet_set_size(s);
+
+    bgp_packet_add(peer, s);
+    bgp_writes_on(peer);
     return 0;
 }

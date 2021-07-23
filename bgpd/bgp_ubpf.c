@@ -991,3 +991,24 @@ int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, 
     bgp_writes_on(peer);
     return 0;
 }
+
+/**
+ * Very dangerous, must be used
+ * only if graceful restart is supported
+ * AND enabled in both BGP speakers (i.e.
+ * us and the remote neighbor)
+ */
+int peer_session_reset(context_t *ctx, const char *peer_ip) {
+    struct peer *peer;
+    peer = bgp_find_peer__(peer_ip);
+
+    if (!peer) return -1;
+    if (!bgp_flag_check(peer->bgp, BGP_FLAG_GRACEFUL_RESTART)) {
+        // graceful restart not enabled
+        // don't reset the connection
+        return -1;
+    }
+
+    bgp_session_reset(peer);
+    return 0;
+}

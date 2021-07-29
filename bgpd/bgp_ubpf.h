@@ -84,4 +84,12 @@ static inline int ret_val_bgp_filter(uint64_t val) {
 
 }
 
+
+
+static inline int ret_val_decode_msg(uint64_t val) {
+    return val == EXIT_SUCCESS ? 1 : 0;
+}
+
+
+
 #endif //PLUGINIZED_FRR_BGP_UBPF_H

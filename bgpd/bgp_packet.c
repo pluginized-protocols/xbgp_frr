@@ -2335,17 +2335,29 @@ int bgp_process_packet(struct thread *thread)
 					"%s: BGP CAPABILITY receipt failed for peer: %s",
 					__FUNCTION__, peer->host);
 			break;
-		default:
-			/* Suppress uninitialized variable warning */
-			mprc = 0;
-			(void)mprc;
-			/*
-			 * The message type should have been sanitized before
-			 * we ever got here. Receipt of a message with an
-			 * invalid header at this point is indicative of a
-			 * security issue.
-			 */
-			assert (!"Message of invalid type received during input processing");
+		default: {
+		    size_t msg_len = stream_get_size(peer->curr);
+		    entry_args_t args[] = {
+		            {.arg = peer->curr->data, .len=msg_len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
+		            {.arg = &msg_len, .len=sizeof(msg_len), .kind=kind_primitive, .type=ARG_LENGTH},
+		            {.arg = peer, .len=sizeof(*peer), .kind=kind_hidden, .type=PEER_SRC},
+		            entry_arg_null
+		    };
+		    CALL_REPLACE_ONLY(BGP_DECODE_MESSAGE, args, ret_val_decode_msg, {
+		        /* Suppress uninitialized variable warning */
+		        mprc = 0;
+		        (void)mprc;
+		        /*
+                 * The message type should have been sanitized before
+                 * we ever got here. Receipt of a message with an
+                 * invalid header at this point is indicative of a
+                 * security issue.
+                 */
+		        assert (!"Message of invalid type received during input processing");
+		    }, {
+		        mprc = BGP_PACKET_NOOP;
+		    })
+		}
 		}
 
 		/* delete processed packet */

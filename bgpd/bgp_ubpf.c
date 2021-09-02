@@ -712,7 +712,8 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
     if (pi == NULL) {
         fprintf(stderr, "pi null\n");
         goto err;
-    } if (p == NULL) {
+    }
+    if (p == NULL) {
         fprintf(stderr, "p null\n");
         goto err;
     }
@@ -845,7 +846,7 @@ struct bgp_route *next_rib_route(context_t *ctx, unsigned int iterator_id) {
 
                 (pi->type == ZEBRA_ROUTE_BGP
                  && (pi->sub_type == BGP_ROUTE_NORMAL
-                     || pi->sub_type == BGP_ROUTE_IMPORTED))){
+                     || pi->sub_type == BGP_ROUTE_IMPORTED))) {
 
                 if (bgp_rte_node_to_ubpf(ctx, pi, &n->p, &rte) == -1) goto err;
                 return rte;
@@ -895,7 +896,7 @@ static int equal_addr(struct ubpf_peer_info *pinfo, union sockunion *frr_remote_
 }
 
 int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_peer_info *pinfo) {
-    struct bgp * bgp;
+    struct bgp *bgp;
     struct bgp_table *table;
     struct prefix frr_pfx;
     bgp = bgp_get_default();
@@ -906,7 +907,7 @@ int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_p
     table = bgp->rib[pfx->afi][pfx->safi];
 
     struct list *matches = list_new();
-    matches->del = (void (*)(void *))bgp_unlock_node;
+    matches->del = (void (*)(void *)) bgp_unlock_node;
 
     ubpf_prefix_to_frr(pfx, &frr_pfx);
 
@@ -943,13 +944,48 @@ int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_p
     return 0;
 }
 
+struct bgp_route *get_rib_out_entry(context_t *ctx, uint8_t af_family,
+        struct ubpf_prefix *pfx, struct ubpf_peer_info *pinfo) {
+    struct bgp *bgp;
+    struct prefix p;
+    struct bgp_node *n;
+    struct bgp_path_info *pi;
+    struct bgp_route *rte;
+
+    bgp = bgp_get_default();
+    if (!bgp) return NULL;
+
+    p.family = afi2family(pfx->afi);
+    p.prefixlen = pfx->prefixlen;
+    if (pfx->afi == XBGP_AFI_IPV4) {
+        memcpy(&p.u.prefix4, pfx->u, sizeof(p.u.prefix4));
+    } else {
+        memcpy(&p.u.prefix6, pfx->u, sizeof(p.u.prefix6));
+    }
+
+    n = bgp_node_match(bgp->rib[pfx->afi][pfx->safi], &p);
+    if (!n) return NULL;
+
+    for (pi = bgp_node_get_bgp_path_info(n); pi; pi = pi->next) {
+        if (pi->type == ZEBRA_ROUTE_BGP &&
+            (pi->sub_type == BGP_ROUTE_NORMAL || pi->sub_type == BGP_ROUTE_IMPORTED) &&
+            memcmp(&pi->peer->remote_id.s_addr, &pinfo->router_id, sizeof(pinfo->router_id)) == 0) {
+
+            if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) return NULL;
+            return rte;
+        }
+    }
+
+
+    return NULL;
+}
 
 int get_vrf(context_t *ctx, struct vrf_info *info) {
     const char *vrf_name;
     size_t vrf_name_len;
     int *vrf_id;
 
-    if(!info) return -1;
+    if (!info) return -1;
     vrf_id = get_arg_from_type(ctx, ARG_BGP_VRF);
     if (vrf_id == NULL) return -1;
 

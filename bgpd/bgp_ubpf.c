@@ -458,7 +458,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
 }
 
 static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, int args_rte) {
-    struct attr *frr_attr;
+    struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
     struct mempool_data data;
     mem_pool *mp;
@@ -472,25 +472,26 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
             frr_attr = ((struct bgp_path_info *) get_arg_from_type(ctx, args_rte))->attr;
             break;
         case ARG_BGP_ATTRIBUTE:
+        case ARG_BGP_ATTRIBUTE_LIST:
             frr_attr = get_arg_from_type(ctx, args_rte);
             break;
         default:
             return NULL;
     }
 
-    if (!frr_attr) return NULL;
+    if (!frr_attr) {
+        mp = frr_attr->ubpf_mempool;
+        if (mp) {
+            if (get_mempool_data(mp, code, &data) != 0) return NULL;
+            mempool_attr = data.data;
+        }
 
-    mp = frr_attr->ubpf_mempool;
-    if (mp) {
-        if (get_mempool_data(mp, code, &data) != 0) return NULL;
-        mempool_attr = data.data;
-    }
-
-    if (mempool_attr) {
-        ret_attr = __ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
-        if (!ret_attr) return NULL;
-        memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
-        return ret_attr;
+        if (mempool_attr) {
+            ret_attr = __ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
+            if (!ret_attr) return NULL;
+            memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
+            return ret_attr;
+        }
     }
 
     // check if it is an attribute handled by frrouting

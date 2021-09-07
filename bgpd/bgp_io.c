@@ -529,20 +529,22 @@ static bool validate_header(struct peer *peer)
 	size = ntohs(size);
 
 	/* BGP type check. */
-	if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE
-	    && type != BGP_MSG_NOTIFY && type != BGP_MSG_KEEPALIVE
-	    && type != BGP_MSG_ROUTE_REFRESH_NEW
-	    && type != BGP_MSG_ROUTE_REFRESH_OLD
-	    && type != BGP_MSG_CAPABILITY) {
-		if (bgp_debug_neighbor_events(peer))
-			zlog_debug("%s unknown message type 0x%02x", peer->host,
-				   type);
+    if (0) {
+        if (type != BGP_MSG_OPEN && type != BGP_MSG_UPDATE
+            && type != BGP_MSG_NOTIFY && type != BGP_MSG_KEEPALIVE
+            && type != BGP_MSG_ROUTE_REFRESH_NEW
+            && type != BGP_MSG_ROUTE_REFRESH_OLD
+            && type != BGP_MSG_CAPABILITY) {
+            if (bgp_debug_neighbor_events(peer))
+                zlog_debug("%s unknown message type 0x%02x", peer->host,
+                           type);
 
-		bgp_notify_send_with_data(peer, BGP_NOTIFY_HEADER_ERR,
-					  BGP_NOTIFY_HEADER_BAD_MESTYPE, &type,
-					  1);
-		return false;
-	}
+            bgp_notify_send_with_data(peer, BGP_NOTIFY_HEADER_ERR,
+                                      BGP_NOTIFY_HEADER_BAD_MESTYPE, &type,
+                                      1);
+            return false;
+        }
+    }
 
 	/* Minimum packet length check. */
 	if ((size < BGP_HEADER_SIZE) || (size > BGP_MAX_PACKET_SIZE)

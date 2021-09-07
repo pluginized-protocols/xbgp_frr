@@ -2269,6 +2269,14 @@ int bgp_process_packet(struct thread *thread)
 		/* adjust size to exclude the marker + length + type */
 		size -= BGP_HEADER_SIZE;
 
+        size_t msg_len = stream_get_size(peer->curr);
+        entry_args_t args[] = {
+                {.arg = peer->curr->data, .len=msg_len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
+                {.arg = &msg_len, .len=sizeof(msg_len), .kind=kind_primitive, .type=ARG_LENGTH},
+                {.arg = peer, .len=sizeof(*peer), .kind=kind_hidden, .type=PEER_SRC},
+                entry_arg_null
+        };
+
 		/* Read rest of the packet and call each sort of packet routine
 		 */
 		switch (type) {
@@ -2286,6 +2294,8 @@ int bgp_process_packet(struct thread *thread)
 			atomic_fetch_add_explicit(&peer->update_in, 1,
 						  memory_order_relaxed);
 			peer->readtime = monotime(NULL);
+
+            CALL_PRE(BGP_DECODE_MESSAGE, args);
 			mprc = bgp_update_receive(peer, size);
 			if (mprc == BGP_Stop)
 				flog_err(
@@ -2336,13 +2346,6 @@ int bgp_process_packet(struct thread *thread)
 					__FUNCTION__, peer->host);
 			break;
 		default: {
-		    size_t msg_len = stream_get_size(peer->curr);
-		    entry_args_t args[] = {
-		            {.arg = peer->curr->data, .len=msg_len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
-		            {.arg = &msg_len, .len=sizeof(msg_len), .kind=kind_primitive, .type=ARG_LENGTH},
-		            {.arg = peer, .len=sizeof(*peer), .kind=kind_hidden, .type=PEER_SRC},
-		            entry_arg_null
-		    };
 		    CALL_REPLACE_ONLY(BGP_DECODE_MESSAGE, args, ret_val_decode_msg, {
 		        /* Suppress uninitialized variable warning */
 		        mprc = 0;

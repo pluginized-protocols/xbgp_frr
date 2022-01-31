@@ -280,7 +280,7 @@ if SNMP
 lib_LTLIBRARIES += lib/libfrrsnmp.la
 endif
 
-lib_libfrrsnmp_la_CFLAGS = $(WERROR) $(SNMP_CFLAGS) -std=gnu99
+lib_libfrrsnmp_la_CFLAGS = $(WERROR) $(SNMP_CFLAGS) $(LIBYANG_CFLAGS) -std=gnu99
 lib_libfrrsnmp_la_LDFLAGS = -version-info 0:0:0
 lib_libfrrsnmp_la_LIBADD = $(SNMP_LIBS)
 lib_libfrrsnmp_la_SOURCES = \
@@ -296,7 +296,7 @@ lib_LTLIBRARIES += lib/libfrrcares.la
 pkginclude_HEADERS += lib/resolver.h
 endif
 
-lib_libfrrcares_la_CFLAGS = $(WERROR) $(CARES_CFLAGS)
+lib_libfrrcares_la_CFLAGS = $(WERROR) $(CARES_CFLAGS) $(LIBYANG_CFLAGS)
 lib_libfrrcares_la_LDFLAGS = -version-info 0:0:0
 lib_libfrrcares_la_LIBADD = $(CARES_LIBS)
 lib_libfrrcares_la_SOURCES = \
@@ -311,7 +311,7 @@ lib_LTLIBRARIES += lib/libfrrzmq.la
 pkginclude_HEADERS += lib/frr_zmq.h
 endif
 
-lib_libfrrzmq_la_CFLAGS = $(WERROR) $(ZEROMQ_CFLAGS)
+lib_libfrrzmq_la_CFLAGS = $(WERROR) $(ZEROMQ_CFLAGS) $(LIBYANG_CFLAGS)
 lib_libfrrzmq_la_LDFLAGS = -version-info 0:0:0
 lib_libfrrzmq_la_LIBADD = $(ZEROMQ_LIBS)
 lib_libfrrzmq_la_SOURCES = \

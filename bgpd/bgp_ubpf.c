@@ -7,6 +7,7 @@
 #include "xbgp_compliant_api/xbgp_plugin_host_api.h"
 #include "ubpf_public.h"
 #include <xbgp_compliant_api/xbgp_ubpf_attr.h>
+#include <tools_ubpf_api.h>
 #include "bgpd.h"
 #include "bgp_attr.h"
 #include "bgp_aspath.h"
@@ -64,22 +65,25 @@ static int set_as4path(struct path_attribute *ubpf_attr, struct attr *host_attr)
     return ubpf_set_aspath(ubpf_attr, host_attr, 1);
 }
 
-#define u32_attr_fn(field) \
+#define u32_attr_fn(field, id) \
 static ssize_t conv_##field (struct attr *host_attr, uint8_t *buf, size_t buf_len) { \
     if (buf_len < sizeof(host_attr->nexthop)) { \
         return -1; \
     }                      \
+    if (!(host_attr->flag & ATTR_FLAG_BIT(id)))  {              \
+      return -1;                       \
+    }\
     memcpy(buf, &host_attr->field, sizeof(host_attr->field))       ;                \
     return sizeof(uint32_t); \
 }
 
-u32_attr_fn(nexthop)
+u32_attr_fn(nexthop, BGP_ATTR_NEXT_HOP)
 
-u32_attr_fn(med)
+u32_attr_fn(med, BGP_ATTR_MULTI_EXIT_DISC)
 
-u32_attr_fn(local_pref)
+u32_attr_fn(local_pref, BGP_ATTR_LOCAL_PREF)
 
-u32_attr_fn(originator_id)
+u32_attr_fn(originator_id, BGP_ATTR_ORIGINATOR_ID)
 
 #define set_u32_attr_fn(field, attr_code)                                          \
 static int set_##field(struct path_attribute *ubpf_attr, struct attr *host_attr) { \
@@ -159,7 +163,9 @@ communities_func(ecommunity, 8)
 
 static ssize_t conv_cluster_list(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
     uint16_t tot_len;
+    if (!host_attr->cluster) return -1;
     tot_len = host_attr->cluster->length;
+
 
     if (tot_len > buf_len) return -1;
     memcpy(buf, host_attr->cluster->list, host_attr->cluster->length);
@@ -370,7 +376,7 @@ struct path_attribute *get_attr(context_t *ctx) {
     if (!frr_attr) return NULL;
 
     tot_len = sizeof(struct path_attribute) + frr_attr->length;
-    ubpf_attr = __ctx_malloc(ctx, tot_len);
+    ubpf_attr = ctx_malloc(ctx, tot_len);
     if (!ubpf_attr) return NULL;
 
     memcpy(ubpf_attr, frr_attr, tot_len);
@@ -443,7 +449,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
             return NULL; //not handled !
     }
 
-    attr = __ctx_malloc(ctx, sizeof(struct path_attribute) + data_attr_len);
+    attr = ctx_malloc(ctx, sizeof(struct path_attribute) + data_attr_len);
     if (!attr) goto err;
 
     attr->code = code;
@@ -479,23 +485,30 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
             return NULL;
     }
 
-    if (!frr_attr) {
-        mp = frr_attr->ubpf_mempool;
-        if (mp) {
-            if (get_mempool_data(mp, code, &data) != 0) return NULL;
+    if (!frr_attr) return NULL;
+
+    mp = frr_attr->ubpf_mempool;
+    /* 1. check fist if in mempool*/
+    if (mp) {
+        if (get_mempool_data(mp, code, &data) == 0) {
+            /* if in mempool set mempool attr*/
             mempool_attr = data.data;
+        } else {
+            /* if not in mempool, check if stored by frr internals */
+            return frr_to_ubpf_attr(ctx, code, frr_attr);
         }
 
+        /* if in mempool */
         if (mempool_attr) {
-            ret_attr = __ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
+            ret_attr = ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
             if (!ret_attr) return NULL;
             memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
             return ret_attr;
         }
     }
 
-    // check if it is an attribute handled by frrouting
-    return frr_to_ubpf_attr(ctx, code, frr_attr);
+    return NULL;
+
 }
 
 
@@ -548,7 +561,7 @@ static inline void fill_peer_info(struct ubpf_peer_info *pinfo, struct peer *pee
     }
 
     pinfo->as = local ? peer->bgp->as : peer->as;
-    pinfo->peer_type = peer->sort == BGP_PEER_EBGP ? BGP_PEER_EBGP : BGP_PEER_IBGP;
+    pinfo->peer_type = peer->sort == BGP_PEER_EBGP ? EBGP_SESSION : IBGP_SESSION;
 }
 
 static struct ubpf_peer_info *ubpf_peer_info_(context_t *ctx, int which_peer) {
@@ -557,8 +570,8 @@ static struct ubpf_peer_info *ubpf_peer_info_(context_t *ctx, int which_peer) {
     struct ubpf_peer_info *pinfo, *local_pinfo;
     if (!peer) return NULL;
 
-    pinfo = __ctx_malloc(ctx, sizeof(*pinfo));
-    local_pinfo = __ctx_malloc(ctx, sizeof(*local_pinfo));
+    pinfo = ctx_malloc(ctx, sizeof(*pinfo));
+    local_pinfo = ctx_malloc(ctx, sizeof(*local_pinfo));
 
     if (!pinfo || !local_pinfo) return NULL;
 
@@ -584,8 +597,8 @@ struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers) { // array o
         return NULL;
     }
 
-    ubpf_peers = __ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
-    local_sessions = __ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
+    ubpf_peers = ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
+    local_sessions = ctx_malloc(ctx, *peer_count * sizeof(struct ubpf_peer_info));
     if (!ubpf_peers || !local_sessions) return NULL;
 
     for (i = 0; i < *peer_count; i++) {
@@ -648,7 +661,7 @@ struct ubpf_prefix *get_prefix(context_t *ctx) {
     struct ubpf_prefix *ubpf_pfx;
 
     frr_pfx = get_arg_from_type(ctx, ARG_BGP_PREFIX);
-    ubpf_pfx = __ctx_malloc(ctx, sizeof(*ubpf_pfx));
+    ubpf_pfx = ctx_malloc(ctx, sizeof(*ubpf_pfx));
     if (!frr_pfx) {
         fprintf(stderr, "Can't get FRR prefix\n");
         return NULL;
@@ -666,11 +679,15 @@ struct ubpf_nexthop *get_nexthop(context_t *ctx, struct ubpf_prefix *fx) {
     pi = get_arg_from_type(ctx, ARG_BGP_ROUTE_RIB);
     if (!pi) return NULL;
 
-    nexthop = __ctx_malloc(ctx, sizeof(*nexthop));
+    nexthop = ctx_malloc(ctx, sizeof(*nexthop));
 
     if (!nexthop) return NULL;
+    if (!pi->extra) {
+        nexthop->igp_metric = 0;
+    } else {
+        nexthop->igp_metric = pi->extra->igpmetric;
+    }
 
-    nexthop->igp_metric = pi->extra->igpmetric;
     nexthop->route_type = -1;
 
     return nexthop;
@@ -724,7 +741,7 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
         return -1;
     }
 
-    rte = __ctx_malloc(ctx, sizeof(*rte));
+    rte = ctx_malloc(ctx, sizeof(*rte));
     if (!rte) goto err;
     memset(rte, 0, sizeof(*rte));
     *rte_ = rte;
@@ -732,10 +749,10 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
     frr_prefix_to_ubpf(p, &rte->pfx);
     rte->attr_nb = nb_attrs;
 
-    rte->attr = __ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
+    rte->attr = ctx_malloc(ctx, nb_attrs * sizeof(struct path_attribute *));
     if (!rte->attr) goto err;
 
-    rte->peer_info = __ctx_calloc(ctx, 1, sizeof(struct ubpf_peer_info));
+    rte->peer_info = ctx_calloc(ctx, 1, sizeof(struct ubpf_peer_info));
     if (!rte->peer_info) goto err;
 
     for (i = 0; i < nb_attrs; i++) {
@@ -754,12 +771,9 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
 }
 
 struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
-
     struct bgp_route *rte;
-    struct path_attribute *pattr;
     struct bgp_path_info *pi;
     short set_attr[30];
-    int i, nb_attrs;
 
     switch (type) {
         case BGP_ROUTE_TYPE_NEW:
@@ -777,6 +791,8 @@ struct bgp_route *get_bgp_route(context_t *ctx, enum BGP_ROUTE_TYPE type) {
     }
 
     if (!pi) return NULL;
+    if (!pi->net) return NULL;
+
     memset(set_attr, 0, sizeof(set_attr));
 
     if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) return NULL;

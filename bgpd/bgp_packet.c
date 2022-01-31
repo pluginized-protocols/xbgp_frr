@@ -2270,7 +2270,7 @@ int bgp_process_packet(struct thread *thread)
 		size -= BGP_HEADER_SIZE;
 
         size_t msg_len = stream_get_size(peer->curr);
-        entry_args_t args[] = {
+        entry_arg_t args[] = {
                 {.arg = peer->curr->data, .len=msg_len, .kind=kind_ptr, .type=ARG_BGP_MESSAGE},
                 {.arg = &msg_len, .len=sizeof(msg_len), .kind=kind_primitive, .type=ARG_LENGTH},
                 {.arg = peer, .len=sizeof(*peer), .kind=kind_hidden, .type=PEER_SRC},

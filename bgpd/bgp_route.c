@@ -471,7 +471,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 
 	*paths_eq = 0;
 
-    entry_args_t args[] = {
+    entry_arg_t args[] = {
             {.arg = new, .len= sizeof(struct bgp_path_info), .kind=kind_hidden, .type=ARG_BGP_ROUTE_NEW},
             {.arg = exist, .len = sizeof(struct bgp_path_info), .kind=kind_hidden, .type=ARG_BGP_ROUTE_OLD},
             {.arg = &bgp->vrf_id, .len = sizeof(bgp->vrf_id), .kind=kind_hidden, .type=ARG_BGP_VRF},
@@ -1634,7 +1634,7 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	}
 
 
-	entry_args_t args[] = {
+	entry_arg_t args[] = {
             {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
             {.arg = peers, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO},
             {.arg = &subgrp->peer_count, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO_COUNT},
@@ -3166,7 +3166,7 @@ int     bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		    && pi->addpath_rx_id == addpath_id)
 			break;
 
-	entry_args_t args[] = {
+	entry_arg_t args[] = {
             {.arg = peer, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
             {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
             {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_PREFIX},

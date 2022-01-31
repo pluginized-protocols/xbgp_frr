@@ -2695,7 +2695,7 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
 				continue;
 			goto done;
 		}
-        entry_args_t args[] = {
+        entry_arg_t args[] = {
                 [0] = {.arg = &type, .len = sizeof(uint8_t), .kind= kind_primitive, .type = ARG_CODE},
                 [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = ARG_FLAGS},
                 [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = ARG_DATA},
@@ -3722,7 +3722,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
         while(mempool_hasnext(it)) {
 
             plug_attr = next_mempool_iterator(it);
-            entry_args_t attr_args[] = {
+            entry_arg_t attr_args[] = {
                     {.arg = plug_attr, .len=sizeof(struct path_attribute) + plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                     {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},

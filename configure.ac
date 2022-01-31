@@ -2400,11 +2400,11 @@ AC_ARG_VAR([UBPF_INC], [Header loctation of libubpf])
 AC_ARG_VAR([XBGP_INC], [Headers to make FRRouting xBGP compilant])
 
 ac_cflags_save="$CFLAGS"
-CFLAGS="$CFLAGS -I$UBPF_INC"
-AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use UBPF_INC to tell its location)])])
-#xbgp requires ubpf_plubic.h
 CFLAGS="$CFLAGS -I$XBGP_INC"
 AC_CHECK_HEADER(["xbgp_compliant_api/xbgp_api_vars.h"], [], [AC_MSG_ERROR([xBGP compliant api headers not found])])
+# vm requires xbgp_compliant_api
+CFLAGS="$CFLAGS -I$UBPF_INC"
+AC_CHECK_HEADER([ubpf_public.h], [], [AC_MSG_ERROR([Libupf headers not found (use UBPF_INC to tell its location)])])
 UBPF_INC="$CFLAGS"
 CFLAGS="$ac_cflags_save"
 
@@ -2417,7 +2417,7 @@ AC_SEARCH_LIBS([ffi_call], [ffi], [], [AC_MSG_ERROR([libffi not found)])])
 ac_ldflags_save="$LDFLAGS"
 ac_libs_save="$LIBS"
 LDFLAGS="$LDFLAGS -L${UBPF_LIB}"
-AC_CHECK_LIB([ubpf], [init_plugin_manager],
+AC_CHECK_LIB([xbgp], [init_plugin_manager],
                [], [AC_MSG_ERROR([libubpf not found (use LIBUBPF variable to include it)])],
                [])
 UBPF_LIB="-L${UBPF_LIB} ${LIBS}"

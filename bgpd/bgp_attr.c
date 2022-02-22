@@ -655,6 +655,8 @@ static void *bgp_attr_hash_alloc(void *p)
 struct attr *bgp_attr_intern(struct attr *attr)
 {
 	struct attr *find;
+    unsigned int i;
+    size_t cust_len;
 
 	/* Intern referenced strucutre. */
 	if (attr->aspath) {
@@ -702,9 +704,16 @@ struct attr *bgp_attr_intern(struct attr *attr)
 			attr->encap_subtlvs->refcnt++;
 	}
 
-    /* custom attrs are already interned
-     * when plugin calls "{set,add}_attr
-     * API functions */
+    /* intern now custom attr created by plugins (if any) */
+    cust_len = custom_attrs_len(attr);
+    for(i = 0; i < cust_len; i++) {
+        if (!attr->custom_attrs[i]) continue;
+        if (!attr->custom_attrs[i]->refcount) {
+            attr->custom_attrs[i] = ubpf_attr_intern(attr->custom_attrs[i]);
+        } else {
+            attr->custom_attrs[i]->refcount += 1;
+        }
+    }
 
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs) {

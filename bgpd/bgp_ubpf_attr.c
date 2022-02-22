@@ -68,7 +68,10 @@ struct custom_attr *ubpf_attr_intern(struct custom_attr *attr) {
         ubpf_attr_init(attr->pattr.code);
     }
 
-    find = hash_get(attrs[attr->pattr.code], attr, ubpf_attr_hash_alloc);
+    find = hash_get(attrs[attr->pattr.code], attr, hash_alloc_intern);
+    if (attr != find) {
+        XFREE(MTYPE_UBPF_ATTR, attr);
+    }
 
     find->refcount += 1;
 

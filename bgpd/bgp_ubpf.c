@@ -323,12 +323,11 @@ static inline int ubpf_to_frr_attr(struct attr *frr_attr, struct path_attribute 
 
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
     struct attr *frr_attr;
-    char attr_space[4096];
     struct custom_attr *attr;
     frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!frr_attr) return -1;
 
-    attr = (struct custom_attr *)attr_space;
+    attr = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*attr) + length);
 
     attr->pattr.flags = flags;
     attr->pattr.code = code;
@@ -340,9 +339,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     // the attribute is not handled by FRRouting anymore !
     memcpy(attr->pattr.data, decoded_attr, length);
 
-    /* we already intern the data here */
-    frr_attr->custom_attrs[code] = ubpf_attr_intern(attr);
-
+    frr_attr->custom_attrs[code] = attr;
     return 0;
 }
 

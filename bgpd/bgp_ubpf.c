@@ -449,7 +449,6 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
 static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, int args_rte) {
     struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
-    struct mempool_data data;
 
     switch (args_rte) {
         case ARG_BGP_ROUTE_NEW:
@@ -469,7 +468,7 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
     /* 1. check first attr is in custom_attr */
     if (frr_attr->custom_attrs[code] != NULL) {
         /* if in mempool set mempool attr*/
-        mempool_attr = data.data;
+        mempool_attr = &frr_attr->custom_attrs[code]->pattr;
     } else {
         /* if not in mempool, check if stored by frr internals */
         return frr_to_ubpf_attr(ctx, code, frr_attr);

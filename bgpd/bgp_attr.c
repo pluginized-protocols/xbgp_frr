@@ -3740,7 +3740,6 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 		// Unicast tunnel endpoint IP address
 	}
 
-	const struct custom_attr *attrs = attr->custom_attrs;
 	struct path_attribute *plug_attr;
     unsigned int i;
     size_t cust_len = custom_attrs_len(attr);

@@ -602,7 +602,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     CALL_REPLACE_ONLY(BGP_PRE_DECISION, args, ret_val_rte_decision, {}, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-    })
+    });
 
 	/* 1. Weight check. */
 	new_weight = newattr->weight;
@@ -647,7 +647,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     }, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-    })
+    });
 
 	if (new_pref < exist_pref) {
 		*reason = bgp_path_selection_local_pref;
@@ -1633,13 +1633,16 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	    peers[my_i++] = paf->peer;
 	}
 
+    /* For modify attribute, copy it to temporary structure. */
+    *attr = *piattr;
+
 
 	entry_arg_t args[] = {
             {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
             {.arg = peers, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO},
             {.arg = &subgrp->peer_count, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEERS_TO_COUNT},
             {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_PREFIX},
-            {.arg = piattr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
             {.arg = pi, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ROUTE_RIB},
             entry_arg_null,
 	};
@@ -1769,9 +1772,6 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 				return 0;
 		}
 	}
-
-	/* For modify attribute, copy it to temporary structure. */
-	*attr = *piattr;
 
 	/* If local-preference is not set. */
 	if ((peer->sort == BGP_PEER_IBGP || peer->sort == BGP_PEER_CONFED)

@@ -17,6 +17,7 @@
 #include "bgp_ubpf.h"
 #include "bgp_io.h"
 #include "bgp_packet.h"
+#include "bgp_ubpf_attr.h"
 
 static ssize_t conv_origin(struct attr *host_attr, uint8_t *buf, size_t buf_len) {
     size_t required_size = sizeof(host_attr->origin);
@@ -321,45 +322,27 @@ static inline int ubpf_to_frr_attr(struct attr *frr_attr, struct path_attribute 
 }
 
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
-
-    struct path_attribute *attr;
     struct attr *frr_attr;
-    mem_pool *mp;
-
+    char attr_space[4096];
+    struct custom_attr *attr;
     frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!frr_attr) return -1;
 
+    attr = (struct custom_attr *)attr_space;
 
-    mp = frr_attr->ubpf_mempool;
-    // we first remove any value associated to this
-    // attribute as it will be overridden by the one
-    // computed by the plugin
-    remove_mempool(mp, code);
-
-    attr = malloc(sizeof(*attr) + length);
-    if (!attr) {
-        return -1;
-    }
-
-    attr->flags = flags;
-    attr->code = code;
-    attr->length = length;
-
-    if (!mp) {
-        return -1;
-    }
+    attr->pattr.flags = flags;
+    attr->pattr.code = code;
+    attr->pattr.length = length;
+    attr->refcount = 0;
 
     // if the attribute is decoded by one plugin on DECODE side
     // there must be a plugin to decode it on ENCODE side.
     // the attribute is not handled by FRRouting anymore !
-    memcpy(attr->data, decoded_attr, length);
+    memcpy(attr->pattr.data, decoded_attr, length);
 
-    if (add_mempool(mp, code, NULL, sizeof(struct path_attribute) + attr->length, attr, 0) != 0) {
-        free(attr);
-        return -1;
-    }
+    /* we already intern the data here */
+    frr_attr->custom_attrs[code] = ubpf_attr_intern(attr);
 
-    free(attr);
     return 0;
 }
 
@@ -467,9 +450,6 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
     struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
     struct mempool_data data;
-    mem_pool *mp;
-
-    mempool_attr = NULL;
 
     switch (args_rte) {
         case ARG_BGP_ROUTE_NEW:
@@ -486,29 +466,23 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
     }
 
     if (!frr_attr) return NULL;
-
-    mp = frr_attr->ubpf_mempool;
-    /* 1. check fist if in mempool*/
-    if (mp) {
-        if (get_mempool_data(mp, code, &data) == 0) {
-            /* if in mempool set mempool attr*/
-            mempool_attr = data.data;
-        } else {
-            /* if not in mempool, check if stored by frr internals */
-            return frr_to_ubpf_attr(ctx, code, frr_attr);
-        }
-
-        /* if in mempool */
-        if (mempool_attr) {
-            ret_attr = ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
-            if (!ret_attr) return NULL;
-            memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
-            return ret_attr;
-        }
+    /* 1. check first attr is in custom_attr */
+    if (frr_attr->custom_attrs[code] != NULL) {
+        /* if in mempool set mempool attr*/
+        mempool_attr = data.data;
+    } else {
+        /* if not in mempool, check if stored by frr internals */
+        return frr_to_ubpf_attr(ctx, code, frr_attr);
     }
 
+    /* if in mempool */
+    if (mempool_attr) {
+        ret_attr = ctx_malloc(ctx, sizeof(struct path_attribute) + mempool_attr->length);
+        if (!ret_attr) return NULL;
+        memcpy(ret_attr, mempool_attr, sizeof(struct path_attribute) + mempool_attr->length);
+        return ret_attr;
+    }
     return NULL;
-
 }
 
 

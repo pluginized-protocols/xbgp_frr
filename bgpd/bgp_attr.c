@@ -56,6 +56,7 @@
 #include "bgp_evpn.h"
 #include "bgp_flowspec_private.h"
 #include "bgp_mac.h"
+#include "bgp_ubpf_attr.h"
 
 /* Attribute strings for logging. */
 static const struct message attr_str[] = {
@@ -489,6 +490,8 @@ unsigned int attrhash_key_make(const void *p)
 {
 	const struct attr *attr = (struct attr *)p;
 	uint32_t key = 0;
+    size_t cust_attrs_len;
+    unsigned int i;
 #define MIX(val)	key = jhash_1word(val, key)
 #define MIX3(a, b, c)	key = jhash_3words((a), (b), (c), key)
 
@@ -523,6 +526,14 @@ unsigned int attrhash_key_make(const void *p)
 	key = jhash(attr->mp_nexthop_local.s6_addr, IPV6_MAX_BYTELEN, key);
 	MIX3(attr->nh_ifindex, attr->nh_lla_ifindex, attr->distance);
 	MIX(attr->rmap_table_id);
+
+
+    cust_attrs_len = custom_attrs_len(attr);
+    for (i = 0; i < cust_attrs_len; i++) {
+        if (attr->custom_attrs[i]) {
+            MIX(ubpf_attr_hash_make(attr->custom_attrs[i]));
+        }
+    }
 
 	return key;
 }
@@ -566,8 +577,17 @@ bool attrhash_cmp(const void *p1, const void *p2)
 		    && overlay_index_same(attr1, attr2)
 		    && attr1->nh_ifindex == attr2->nh_ifindex
 		    && attr1->nh_lla_ifindex == attr2->nh_lla_ifindex
-		    && attr1->distance == attr2->distance)
-			return true;
+		    && attr1->distance == attr2->distance) {
+
+            /* check custom attrs */
+            size_t cust_len = custom_attrs_len(attr1);
+            for (unsigned int i = 0; i < cust_len; i++) {
+                if (attr1->custom_attrs[i] != attr2->custom_attrs[i])
+                    return false;
+            }
+
+            return true;
+        }
 	}
 
 	return false;
@@ -681,6 +701,11 @@ struct attr *bgp_attr_intern(struct attr *attr)
 		else
 			attr->encap_subtlvs->refcnt++;
 	}
+
+    /* custom attrs are already interned
+     * when plugin calls "{set,add}_attr
+     * API functions */
+
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs) {
 		if (!attr->vnc_subtlvs->refcnt)
@@ -2700,7 +2725,7 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
                 [1] = {.arg = &flag, .len = sizeof(uint8_t), .kind = kind_primitive, .type = ARG_FLAGS},
                 [2] = {.arg = stream_pnt(BGP_INPUT(peer)), .len = length, .kind=kind_ptr, .type = ARG_DATA},
                 [3] = {.arg = &attr_args.length, .len = sizeof(uint16_t), .kind=kind_primitive, .type = ARG_LENGTH},
-                [4] = {.arg = attr->ubpf_mempool, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
+                [4] = {.arg = attr->custom_attrs, .len=sizeof(mem_pool *), .kind=kind_hidden, .type=MEMPOOL},
                 [5] = {.arg = attr, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE_LIST},
                 [6] = {.arg = peer, .len=sizeof(uintptr_t), .kind= kind_hidden, .type=PEER_SRC},
                 entry_arg_null,
@@ -2787,7 +2812,7 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
             } else {
                 ret = BGP_ATTR_PARSE_PROCEED;
             }
-        })
+        });
 
 		if (ret == BGP_ATTR_PARSE_ERROR_NOTIFYPLS) {
 			bgp_notify_send(peer, BGP_NOTIFY_UPDATE_ERR,
@@ -3715,15 +3740,18 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 		// Unicast tunnel endpoint IP address
 	}
 
-	mempool_iterator *it = new_mempool_iterator(attr->ubpf_mempool);
+	const struct custom_attr *attrs = attr->custom_attrs;
 	struct path_attribute *plug_attr;
+    unsigned int i;
+    size_t cust_len = custom_attrs_len(attr);
 	int my_one = 1;
-	if (it) {
-        while(mempool_hasnext(it)) {
 
-            plug_attr = next_mempool_iterator(it);
+    for (i = 0; i < cust_len; i++) {
+        if (attr->custom_attrs[i]) {
+            plug_attr = &attr->custom_attrs[i]->pattr;
             entry_arg_t attr_args[] = {
-                    {.arg = plug_attr, .len=sizeof(struct path_attribute) + plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
+                    {.arg = plug_attr, .len=sizeof(struct path_attribute) +
+                                            plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
                     {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                     {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                     {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
@@ -3734,8 +3762,8 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
             CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
                 // fail
             }, {
-                // todo check value written length announced and byte written (invalid length)
-            })
+                                  // todo check value written length announced and byte written (invalid length)
+                              });
         }
     }
 

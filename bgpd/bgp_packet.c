@@ -1407,8 +1407,6 @@ static int bgp_update_receive(struct peer *peer, bgp_size_t size)
 	bgp_size_t update_len;
 	bgp_size_t withdraw_len;
 
-	mem_pool *rcvd_prefix;
-
 	enum NLRI_TYPES {
 		NLRI_UPDATE,
 		NLRI_WITHDRAW,
@@ -1430,16 +1428,12 @@ static int bgp_update_receive(struct peer *peer, bgp_size_t size)
 	}
 
 	/* Set initial values. */
-	rcvd_prefix = new_mempool();
 	memset(&attr, 0, sizeof(struct attr));
 	attr.label_index = BGP_INVALID_LABEL_INDEX;
 	attr.label = MPLS_INVALID_LABEL;
 	memset(&nlris, 0, sizeof(nlris));
 	memset(peer->rcvd_attr_str, 0, BUFSIZ);
 	peer->rcvd_attr_printed = 0;
-	attr.ubpf_mempool = new_mempool();
-	if (!attr.ubpf_mempool) return BGP_Stop;
-	if (!rcvd_prefix) return BGP_Stop;
 	s = peer->curr;
 	end = stream_pnt(s) + size;
 

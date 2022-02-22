@@ -321,6 +321,11 @@ static inline int ubpf_to_frr_attr(struct attr *frr_attr, struct path_attribute 
     return 0;
 }
 
+
+static inline void set_index(uint64_t *bitarray, size_t idx) {
+    bitarray[idx / 64] |= (1 << (idx % 64));
+}
+
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
     struct attr *frr_attr;
     struct custom_attr *attr;
@@ -340,6 +345,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     memcpy(attr->pattr.data, decoded_attr, length);
 
     frr_attr->custom_attrs[code] = attr;
+    set_index(frr_attr->bitset_custom_attrs, code);
     return 0;
 }
 

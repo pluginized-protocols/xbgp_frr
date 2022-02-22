@@ -527,11 +527,22 @@ unsigned int attrhash_key_make(const void *p)
 	MIX3(attr->nh_ifindex, attr->nh_lla_ifindex, attr->distance);
 	MIX(attr->rmap_table_id);
 
-
-    cust_attrs_len = custom_attrs_len(attr);
+    /*cust_attrs_len = custom_attrs_len(attr);
     for (i = 0; i < cust_attrs_len; i++) {
         if (attr->custom_attrs[i]) {
             MIX(ubpf_attr_hash_make(attr->custom_attrs[i]));
+        }
+    }*/
+
+    uint64_t bitset;
+    for (size_t k = 0; k < 4; ++k) {
+        bitset = attr->bitset_custom_attrs[k];
+        while (bitset != 0) {
+            uint64_t t = bitset & -bitset;
+            int r = __builtin_ctzl(bitset);
+            MIX(ubpf_attr_hash_make(attr->custom_attrs[k * 64 + r]));
+            //callback(k * 64 + r);
+            bitset ^= t;
         }
     }
 

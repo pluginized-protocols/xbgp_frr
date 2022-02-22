@@ -8,7 +8,7 @@
 #include <string.h>
 #include "hash.h"
 #include "jhash.h"
-#include "memory.h"
+#include "bgp_memory.h"
 #include "assert.h"
 
 #define MAX_ATTRIBUTES 256

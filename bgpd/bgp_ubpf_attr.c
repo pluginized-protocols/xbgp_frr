@@ -10,7 +10,6 @@
 #include "jhash.h"
 #include "memory.h"
 #include "assert.h"
-#include "bgp_memory.h"
 
 #define MAX_ATTRIBUTES 256
 
@@ -35,7 +34,7 @@ inline bool ubpf_attr_cmp(const void *arg1, const void *arg2) {
         memcmp(attr1->pattr.data, attr2->pattr.data, attr1->pattr.length);
 }
 
-void ubpf_attr_init(uint8_t code) {
+static void ubpf_attr_init(uint8_t code) {
     /* if hash is already init stop now */
     if (attrs[code]) return;
 

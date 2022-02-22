@@ -58,6 +58,23 @@
 #include "bgp_mac.h"
 #include "bgp_ubpf_attr.h"
 
+#define iterate_bitset_begin(bitmap, bitmapsize, idx) do {     \
+    uint64_t bitset;                          \
+    for (size_t k = 0; k < (bitmapsize); ++k) { \
+        bitset = (bitmap)[k];                   \
+        while (bitset != 0) {                 \
+            uint64_t t = bitset & -bitset;    \
+            int r = __builtin_ctzl(bitset);   \
+            (idx) = k * 64 + r;
+
+#define iterate_bitset_end \
+            bitset ^= t;   \
+        }                  \
+    }                      \
+} while(0)
+
+
+
 /* Attribute strings for logging. */
 static const struct message attr_str[] = {
 	{BGP_ATTR_ORIGIN, "ORIGIN"},
@@ -490,8 +507,7 @@ unsigned int attrhash_key_make(const void *p)
 {
 	const struct attr *attr = (struct attr *)p;
 	uint32_t key = 0;
-    size_t cust_attrs_len;
-    unsigned int i;
+    unsigned long idx;
 #define MIX(val)	key = jhash_1word(val, key)
 #define MIX3(a, b, c)	key = jhash_3words((a), (b), (c), key)
 
@@ -527,24 +543,9 @@ unsigned int attrhash_key_make(const void *p)
 	MIX3(attr->nh_ifindex, attr->nh_lla_ifindex, attr->distance);
 	MIX(attr->rmap_table_id);
 
-    /*cust_attrs_len = custom_attrs_len(attr);
-    for (i = 0; i < cust_attrs_len; i++) {
-        if (attr->custom_attrs[i]) {
-            MIX(ubpf_attr_hash_make(attr->custom_attrs[i]));
-        }
-    }*/
-
-    uint64_t bitset;
-    for (size_t k = 0; k < 4; ++k) {
-        bitset = attr->bitset_custom_attrs[k];
-        while (bitset != 0) {
-            uint64_t t = bitset & -bitset;
-            int r = __builtin_ctzl(bitset);
-            MIX(ubpf_attr_hash_make(attr->custom_attrs[k * 64 + r]));
-            //callback(k * 64 + r);
-            bitset ^= t;
-        }
-    }
+    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
+        MIX(ubpf_attr_hash_make(attr->custom_attrs[idx]));
+    } iterate_bitset_end;
 
 	return key;
 }
@@ -553,6 +554,7 @@ bool attrhash_cmp(const void *p1, const void *p2)
 {
 	const struct attr *attr1 = p1;
 	const struct attr *attr2 = p2;
+    unsigned long idx;
 
 	if (attr1->flag == attr2->flag && attr1->origin == attr2->origin
 	    && attr1->nexthop.s_addr == attr2->nexthop.s_addr
@@ -591,11 +593,14 @@ bool attrhash_cmp(const void *p1, const void *p2)
 		    && attr1->distance == attr2->distance) {
 
             /* check custom attrs */
-            size_t cust_len = custom_attrs_len(attr1);
-            for (unsigned int i = 0; i < cust_len; i++) {
-                if (attr1->custom_attrs[i] != attr2->custom_attrs[i])
+            if (memcmp(attr1->bitset_custom_attrs, attr2->custom_attrs, sizeof(attr1->custom_attrs)) != 0)
+                return false;
+
+            iterate_bitset_begin(attr1->bitset_custom_attrs, 4, idx) {
+                if (attr1->custom_attrs[idx] != attr2->custom_attrs[idx]){
                     return false;
-            }
+                }
+            } iterate_bitset_end;
 
             return true;
         }
@@ -666,8 +671,7 @@ static void *bgp_attr_hash_alloc(void *p)
 struct attr *bgp_attr_intern(struct attr *attr)
 {
 	struct attr *find;
-    unsigned int i;
-    size_t cust_len;
+    unsigned long idx;
 
 	/* Intern referenced strucutre. */
 	if (attr->aspath) {
@@ -716,15 +720,13 @@ struct attr *bgp_attr_intern(struct attr *attr)
 	}
 
     /* intern now custom attr created by plugins (if any) */
-    cust_len = custom_attrs_len(attr);
-    for(i = 0; i < cust_len; i++) {
-        if (!attr->custom_attrs[i]) continue;
-        if (!attr->custom_attrs[i]->refcount) {
-            attr->custom_attrs[i] = ubpf_attr_intern(attr->custom_attrs[i]);
+    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
+        if (!attr->custom_attrs[idx]->refcount) {
+            attr->custom_attrs[idx] = ubpf_attr_intern(attr->custom_attrs[idx]);
         } else {
-            attr->custom_attrs[i]->refcount += 1;
+            attr->custom_attrs[idx]->refcount += 1;
         }
-    }
+    } iterate_bitset_end;
 
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs) {
@@ -3761,32 +3763,27 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 	}
 
 	struct path_attribute *plug_attr;
-    unsigned int i;
-    size_t cust_len = custom_attrs_len(attr);
+    unsigned int idx;
 	int my_one = 1;
 
-    for (i = 0; i < cust_len; i++) {
-        if (attr->custom_attrs[i]) {
-            plug_attr = &attr->custom_attrs[i]->pattr;
-            entry_arg_t attr_args[] = {
-                    {.arg = plug_attr, .len=sizeof(struct path_attribute) +
-                                            plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
-                    {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
-                    {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
-                    {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
-                    {.arg = from, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEER_SRC},
-                    entry_arg_null
-            };
+    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
+        plug_attr = &attr->custom_attrs[idx]->pattr;
+        entry_arg_t attr_args[] = {
+                {.arg = plug_attr, .len=sizeof(struct path_attribute) +
+                                        plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
+                {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
+                {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
+                {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
+                {.arg = from, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEER_SRC},
+                entry_arg_null
+        };
 
-            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
-                // fail
-            }, {
-                                  // todo check value written length announced and byte written (invalid length)
-                              });
-        }
-    }
-
-
+        CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
+            // fail
+        }, {
+                              // todo check value written length announced and byte written (invalid length)
+                          });
+    } iterate_bitset_end;
 
 	/* Unknown transit attribute. */
 	if (attr->transit)

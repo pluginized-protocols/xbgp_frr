@@ -593,8 +593,11 @@ bool attrhash_cmp(const void *p1, const void *p2)
 		    && attr1->distance == attr2->distance) {
 
             /* check custom attrs */
-            if (memcmp(attr1->bitset_custom_attrs, attr2->custom_attrs, sizeof(attr1->custom_attrs)) != 0)
+            if (memcmp(attr1->bitset_custom_attrs,
+                       attr2->bitset_custom_attrs,
+                       sizeof(attr1->bitset_custom_attrs)) != 0) {
                 return false;
+            }
 
             iterate_bitset_begin(attr1->bitset_custom_attrs, 4, idx) {
                 if (attr1->custom_attrs[idx] != attr2->custom_attrs[idx]){

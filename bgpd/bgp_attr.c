@@ -58,6 +58,7 @@
 #include "bgp_mac.h"
 #include "bgp_ubpf_attr.h"
 
+/* taken from https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/ */
 #define iterate_bitset_begin(bitmap, bitmapsize, idx) do {     \
     uint64_t bitset;                          \
     for (size_t k = 0; k < (bitmapsize); ++k) { \
@@ -890,6 +891,7 @@ struct attr *bgp_attr_aggregate_intern(struct bgp *bgp, uint8_t origin,
 /* Unintern just the sub-components of the attr, but not the attr */
 void bgp_attr_unintern_sub(struct attr *attr)
 {
+    unsigned long idx;
 	/* aspath refcount shoud be decrement. */
 	if (attr->aspath)
 		aspath_unintern(&attr->aspath);
@@ -916,6 +918,10 @@ void bgp_attr_unintern_sub(struct attr *attr)
 
 	if (attr->encap_subtlvs)
 		encap_unintern(&attr->encap_subtlvs, ENCAP_SUBTLV_TYPE);
+
+    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
+        ubpf_attr_unintern(&attr->custom_attrs[idx]);
+    } iterate_bitset_end;
 
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs)

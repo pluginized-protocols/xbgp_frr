@@ -30,8 +30,8 @@ inline bool ubpf_attr_cmp(const void *arg1, const void *arg2) {
         return false;
     }
 
-    return (attr1->pattr.length ==  attr2->pattr.length) &&
-        memcmp(attr1->pattr.data, attr2->pattr.data, attr1->pattr.length);
+    return ((attr1->pattr.length ==  attr2->pattr.length) &&
+            (memcmp(attr1->pattr.data, attr2->pattr.data, attr1->pattr.length) == 0));
 }
 
 static void ubpf_attr_init(uint8_t code) {

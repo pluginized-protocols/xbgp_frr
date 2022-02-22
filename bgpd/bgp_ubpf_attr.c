@@ -4,13 +4,13 @@
 
 #include "bgp_ubpf_attr.h"
 
+#include <stdbool.h>
+#include <string.h>
 #include "hash.h"
 #include "jhash.h"
 #include "memory.h"
 #include "assert.h"
 #include "bgp_memory.h"
-#include <stdbool.h>
-#include <string.h>
 
 #define MAX_ATTRIBUTES 256
 

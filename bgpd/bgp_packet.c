@@ -2353,7 +2353,7 @@ int bgp_process_packet(struct thread *thread)
 		        assert (!"Message of invalid type received during input processing");
 		    }, {
 		        mprc = BGP_PACKET_NOOP;
-		    })
+		    });
 		}
 		}
 

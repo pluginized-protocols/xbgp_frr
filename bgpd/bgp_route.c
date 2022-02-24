@@ -744,7 +744,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	}, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-	})
+	});
 
 
 	/* 5. Origin check. */
@@ -761,7 +761,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     }, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-    })
+    });
 	if (newattr->origin < existattr->origin) {
 		*reason = bgp_path_selection_origin;
 		if (debug)
@@ -812,7 +812,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     }, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-    })
+    });
 
 	/* 7. Peer type check. */
 	new_sort = new->peer->sort;
@@ -841,7 +841,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     }, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-    })
+    });
 
 	/* 8. IGP metric check. */
 	newm = existm = 0;
@@ -996,7 +996,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	}, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-	})
+	});
 
 	/* 12. If both paths are external, prefer the path that was received
 	   first (the oldest one).  This step minimizes route-flap, since a
@@ -1058,7 +1058,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     }, {
         if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
         else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
-    })
+    });
 
 
 	/* 14. Cluster length comparision. */
@@ -1654,7 +1654,7 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 	    if (VM_RETURN_VALUE == PLUGIN_FILTER_REJECT) {
 	        return 0;
 	    }
-	})
+	});
 
 	/* Do not send the default route in the BGP table if the neighbor is
 	 * configured for default-originate */
@@ -3183,7 +3183,7 @@ int     bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
             default:
                 break;
         }
-	})
+	});
 
 	/* AS path local-as loop check. */
 	if (peer->change_local_as) {

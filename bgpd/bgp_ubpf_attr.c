@@ -10,6 +10,7 @@
 #include "jhash.h"
 #include "bgp_memory.h"
 #include "assert.h"
+#include <stdint.h>
 
 #define MAX_ATTRIBUTES 256
 
@@ -83,9 +84,4 @@ void ubpf_attr_unintern(struct custom_attr **attr) {
     if ((*attr)->refcount == 0) {
         XFREE(MTYPE_UBPF_ATTR, *attr);
     }
-}
-
-
-inline void unset_index(uint64_t *bitarray, size_t idx) {
-    bitarray[idx / 64] &= ~(1 << (idx % 64));
 }

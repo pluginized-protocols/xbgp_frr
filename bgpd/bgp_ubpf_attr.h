@@ -5,8 +5,8 @@
 #ifndef PLUGINIZED_FRR_BGP_UBPF_ATTR_H
 #define PLUGINIZED_FRR_BGP_UBPF_ATTR_H
 
-#include <stddef.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <xbgp_compliant_api/xbgp_defs.h>
 #include "uthash.h"
 
@@ -26,7 +26,10 @@ struct custom_attr *ubpf_attr_intern(struct custom_attr *attr);
 void ubpf_attr_unintern(struct custom_attr **attr);
 unsigned int ubpf_attr_hash_make(const void *arg);
 bool ubpf_attr_cmp(const void *arg1, const void *arg2);
-void unset_index(uint64_t *bitarray, size_t idx);
+
+#define unset_index(bitarray, idx)  do {          \
+    (bitarray)[(idx) / 64] &= ~(1 << ((idx) % 64)); \
+} while(0)
 
 
 #endif //PLUGINIZED_FRR_BGP_UBPF_ATTR_H

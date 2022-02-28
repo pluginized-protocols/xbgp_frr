@@ -84,3 +84,8 @@ void ubpf_attr_unintern(struct custom_attr **attr) {
         XFREE(MTYPE_UBPF_ATTR, *attr);
     }
 }
+
+
+inline void unset_index(uint64_t *bitarray, size_t idx) {
+    bitarray[idx / 64] &= ~(1 << (idx % 64));
+}

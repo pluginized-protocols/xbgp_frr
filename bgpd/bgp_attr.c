@@ -931,6 +931,7 @@ void bgp_attr_unintern_sub(struct attr *attr)
 
     struct rte_attr *rt_attr, *rt_attr_tmp;
     HASH_ITER(hh, attr->custom_attrs, rt_attr, rt_attr_tmp) {
+        unset_index(attr->bitset_custom_attrs, rt_attr->code);
         ubpf_attr_unintern(&rt_attr->attr);
         HASH_DEL(attr->custom_attrs, rt_attr);
         XFREE(MTYPE_UBPF_ATTR, rt_attr);

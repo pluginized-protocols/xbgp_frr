@@ -3780,15 +3780,16 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 		// Unicast tunnel endpoint IP address
 	}
 
-	struct path_attribute *plug_attr;
+	struct custom_attr *plug_attr;
     unsigned int idx;
 	int my_one = 1;
 
     iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
-        plug_attr = &attr->custom_attrs[idx]->pattr;
+        HASH_FIND_INT(attr->custom_attrs, &idx, plug_attr);
+        assert(plug_attr != NULL);
         entry_arg_t attr_args[] = {
-                {.arg = plug_attr, .len=sizeof(struct path_attribute) +
-                                        plug_attr->length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
+                {.arg = &plug_attr->pattr, .len=sizeof(struct path_attribute) +
+                                        plug_attr->pattr.length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
                 {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                 {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                 {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},

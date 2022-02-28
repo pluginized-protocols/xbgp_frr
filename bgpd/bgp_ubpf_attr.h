@@ -8,8 +8,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <xbgp_compliant_api/xbgp_defs.h>
+#include "uthash.h"
 
 struct custom_attr {
+    UT_hash_handle hh;
+    int code;
     unsigned long refcount;
     struct path_attribute pattr;
 };

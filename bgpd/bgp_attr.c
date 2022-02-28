@@ -544,8 +544,11 @@ unsigned int attrhash_key_make(const void *p)
 	MIX3(attr->nh_ifindex, attr->nh_lla_ifindex, attr->distance);
 	MIX(attr->rmap_table_id);
 
+    struct custom_attr *find;
     iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
-        MIX(ubpf_attr_hash_make(attr->custom_attrs[idx]));
+        HASH_FIND_INT(attr->custom_attrs, &idx, find);
+        assert(find != NULL);
+        MIX(ubpf_attr_hash_make(find));
     } iterate_bitset_end;
 
 	return key;
@@ -600,8 +603,12 @@ bool attrhash_cmp(const void *p1, const void *p2)
                 return false;
             }
 
+            struct custom_attr *cattr1, *cattr2;
             iterate_bitset_begin(attr1->bitset_custom_attrs, 4, idx) {
-                if (attr1->custom_attrs[idx] != attr2->custom_attrs[idx]){
+                HASH_FIND_INT(attr1->custom_attrs, &idx, cattr1);
+                HASH_FIND_INT(attr2->custom_attrs, &idx, cattr2);
+                assert(cattr1 != NULL && cattr2 != NULL);
+                if (cattr1 != cattr2) {
                     return false;
                 }
             } iterate_bitset_end;
@@ -724,13 +731,15 @@ struct attr *bgp_attr_intern(struct attr *attr)
 	}
 
     /* intern now custom attr created by plugins (if any) */
-    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
-        if (!attr->custom_attrs[idx]->refcount) {
-            attr->custom_attrs[idx] = ubpf_attr_intern(attr->custom_attrs[idx]);
+    struct custom_attr *cattr, *ctmpattr, *interned_attr;
+    HASH_ITER(hh, attr->custom_attrs, cattr, ctmpattr) {
+        if (!cattr->refcount) {
+            interned_attr = ubpf_attr_intern(cattr);
+            HASH_ADD_INT(attr->custom_attrs, code, interned_attr);
         } else {
-            attr->custom_attrs[idx]->refcount += 1;
+            cattr->refcount += 1;
         }
-    } iterate_bitset_end;
+    }
 
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs) {

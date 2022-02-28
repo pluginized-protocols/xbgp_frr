@@ -333,6 +333,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     if (!frr_attr) return -1;
 
     attr = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*attr) + length);
+    attr->code = code;
 
     attr->pattr.flags = flags;
     attr->pattr.code = code;
@@ -344,7 +345,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     // the attribute is not handled by FRRouting anymore !
     memcpy(attr->pattr.data, decoded_attr, length);
 
-    frr_attr->custom_attrs[code] = attr;
+    HASH_ADD_INT(frr_attr->custom_attrs, code, attr);
     set_index(frr_attr->bitset_custom_attrs, code);
     return 0;
 }
@@ -452,6 +453,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
 static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, int args_rte) {
     struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
+    struct custom_attr *find;
 
     switch (args_rte) {
         case ARG_BGP_ROUTE_NEW:
@@ -469,9 +471,11 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
 
     if (!frr_attr) return NULL;
     /* 1. check first attr is in custom_attr */
-    if (frr_attr->custom_attrs[code] != NULL) {
+    HASH_FIND_INT(frr_attr->custom_attrs, &code, find);
+
+    if (find) {
         /* if in mempool set mempool attr*/
-        mempool_attr = &frr_attr->custom_attrs[code]->pattr;
+        mempool_attr = &find->pattr;
     } else {
         /* if not in mempool, check if stored by frr internals */
         return frr_to_ubpf_attr(ctx, code, frr_attr);

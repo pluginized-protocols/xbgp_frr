@@ -329,23 +329,27 @@ static inline void set_index(uint64_t *bitarray, size_t idx) {
 int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
     struct attr *frr_attr;
     struct custom_attr *attr;
+    struct rte_attr *rt_attr;
     frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!frr_attr) return -1;
 
     attr = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*attr) + length);
-    attr->code = code;
+    rt_attr = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rt_attr));
 
     attr->pattr.flags = flags;
     attr->pattr.code = code;
     attr->pattr.length = length;
     attr->refcount = 0;
 
+    rt_attr->attr = attr;
+    rt_attr->code = code;
+
     // if the attribute is decoded by one plugin on DECODE side
     // there must be a plugin to decode it on ENCODE side.
     // the attribute is not handled by FRRouting anymore !
     memcpy(attr->pattr.data, decoded_attr, length);
 
-    HASH_ADD_INT(frr_attr->custom_attrs, code, attr);
+    HASH_ADD_INT(frr_attr->custom_attrs, code, rt_attr);
     set_index(frr_attr->bitset_custom_attrs, code);
     return 0;
 }
@@ -453,7 +457,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
 static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, int args_rte) {
     struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
-    struct custom_attr *find;
+    struct rte_attr *find;
 
     switch (args_rte) {
         case ARG_BGP_ROUTE_NEW:
@@ -475,7 +479,7 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, i
 
     if (find) {
         /* if in mempool set mempool attr*/
-        mempool_attr = &find->pattr;
+        mempool_attr = &find->attr->pattr;
     } else {
         /* if not in mempool, check if stored by frr internals */
         return frr_to_ubpf_attr(ctx, code, frr_attr);

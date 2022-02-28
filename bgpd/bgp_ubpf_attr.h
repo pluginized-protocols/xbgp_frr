@@ -11,10 +11,14 @@
 #include "uthash.h"
 
 struct custom_attr {
-    UT_hash_handle hh;
-    int code;
     unsigned long refcount;
     struct path_attribute pattr;
+};
+
+struct rte_attr {
+    UT_hash_handle hh;
+    int code;
+    struct custom_attr *attr;
 };
 
 

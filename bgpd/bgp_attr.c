@@ -544,11 +544,11 @@ unsigned int attrhash_key_make(const void *p)
 	MIX3(attr->nh_ifindex, attr->nh_lla_ifindex, attr->distance);
 	MIX(attr->rmap_table_id);
 
-    struct custom_attr *find;
+    struct rte_attr *find;
     iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
         HASH_FIND_INT(attr->custom_attrs, &idx, find);
         assert(find != NULL);
-        MIX(ubpf_attr_hash_make(find));
+        MIX(ubpf_attr_hash_make(find->attr));
     } iterate_bitset_end;
 
 	return key;
@@ -603,12 +603,12 @@ bool attrhash_cmp(const void *p1, const void *p2)
                 return false;
             }
 
-            struct custom_attr *cattr1, *cattr2;
+            struct rte_attr *cattr1, *cattr2;
             iterate_bitset_begin(attr1->bitset_custom_attrs, 4, idx) {
                 HASH_FIND_INT(attr1->custom_attrs, &idx, cattr1);
                 HASH_FIND_INT(attr2->custom_attrs, &idx, cattr2);
                 assert(cattr1 != NULL && cattr2 != NULL);
-                if (cattr1 != cattr2) {
+                if (cattr1->attr != cattr2->attr) {
                     return false;
                 }
             } iterate_bitset_end;
@@ -731,13 +731,14 @@ struct attr *bgp_attr_intern(struct attr *attr)
 	}
 
     /* intern now custom attr created by plugins (if any) */
-    struct custom_attr *cattr, *ctmpattr, *interned_attr;
+    struct rte_attr *cattr, *ctmpattr;
+    struct custom_attr *interned_attr;
     HASH_ITER(hh, attr->custom_attrs, cattr, ctmpattr) {
-        if (!cattr->refcount) {
-            interned_attr = ubpf_attr_intern(cattr);
-            HASH_ADD_INT(attr->custom_attrs, code, interned_attr);
+        if (!cattr->attr->refcount) {
+            interned_attr = ubpf_attr_intern(cattr->attr);
+            cattr->attr = interned_attr;
         } else {
-            cattr->refcount += 1;
+            cattr->attr->refcount += 1;
         }
     }
 
@@ -928,9 +929,11 @@ void bgp_attr_unintern_sub(struct attr *attr)
 	if (attr->encap_subtlvs)
 		encap_unintern(&attr->encap_subtlvs, ENCAP_SUBTLV_TYPE);
 
-    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
-        ubpf_attr_unintern(&attr->custom_attrs[idx]);
-    } iterate_bitset_end;
+    struct rte_attr *rt_attr, *rt_attr_tmp;
+    HASH_ITER(hh, attr->custom_attrs, rt_attr, rt_attr_tmp) {
+        ubpf_attr_unintern(&rt_attr->attr);
+        XFREE(MTYPE_UBPF_ATTR, rt_attr);
+    }
 
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs)
@@ -3780,7 +3783,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 		// Unicast tunnel endpoint IP address
 	}
 
-	struct custom_attr *plug_attr;
+	struct rte_attr *plug_attr;
     unsigned int idx;
 	int my_one = 1;
 
@@ -3788,8 +3791,8 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
         HASH_FIND_INT(attr->custom_attrs, &idx, plug_attr);
         assert(plug_attr != NULL);
         entry_arg_t attr_args[] = {
-                {.arg = &plug_attr->pattr, .len=sizeof(struct path_attribute) +
-                                        plug_attr->pattr.length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
+                {.arg = &plug_attr->attr->pattr, .len=sizeof(struct path_attribute) +
+                        plug_attr->attr->pattr.length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
                 {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
                 {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
                 {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},

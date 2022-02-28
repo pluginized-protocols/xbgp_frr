@@ -454,7 +454,7 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
     return NULL;
 }
 
-static struct path_attribute *get_attr_by_code__(context_t *ctx, uint8_t code, int args_rte) {
+static struct path_attribute *get_attr_by_code__(context_t *ctx, int code, int args_rte) {
     struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
     struct rte_attr *find;

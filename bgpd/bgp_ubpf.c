@@ -349,8 +349,8 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     // the attribute is not handled by FRRouting anymore !
     memcpy(attr->pattr.data, decoded_attr, length);
 
-    HASH_ADD_INT(frr_attr->custom_attrs, code, rt_attr);
-    set_index(frr_attr->bitset_custom_attrs, code);
+    HASH_ADD_INT(frr_attr->custom_attrs->head_hash, code, rt_attr);
+    set_index(frr_attr->custom_attrs->bitset_attrs, code);
     return 0;
 }
 
@@ -475,7 +475,7 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, int code, int a
 
     if (!frr_attr) return NULL;
     /* 1. check first attr is in custom_attr */
-    HASH_FIND_INT(frr_attr->custom_attrs, &code, find);
+    HASH_FIND_INT(frr_attr->custom_attrs->head_hash, &code, find);
 
     if (find) {
         /* if in mempool set mempool attr*/

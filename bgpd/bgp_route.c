@@ -1637,7 +1637,6 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 
     /* For modify attribute, copy it to temporary structure. */
     *attr = *piattr;
-    custom_attr_cpy(piattr->custom_attrs, &attr->custom_attrs);
 
 	entry_arg_t args[] = {
             {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
@@ -1875,7 +1874,6 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 		memset(&rmap_path, 0, sizeof(struct bgp_path_info));
 		rmap_path.peer = peer;
 		rmap_path.attr = attr;
-        custom_attr_cpy(attr->custom_attrs, &rmap_path.attr->custom_attrs);
 		rmap_path.net = rn;
 
 		if (pi->extra) {
@@ -1895,7 +1893,6 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 		    && !bgp_flag_check(bgp,
 				       BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY)) {
 			dummy_attr = *attr;
-            custom_attr_cpy(attr->custom_attrs, &dummy_attr.custom_attrs);
 			rmap_path.attr = &dummy_attr;
 		}
 
@@ -3278,7 +3275,6 @@ int     bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		}
 
 	new_attr = *attr;
-    custom_attr_cpy(attr->custom_attrs, &new_attr.custom_attrs);
 
 	/* Apply incoming route-map.
 	 * NB: new_attr may now contain newly allocated values from route-map
@@ -9347,7 +9343,6 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 				route_map_result_t ret;
 
 				dummy_attr = *pi->attr;
-                custom_attr_cpy(pi->attr->custom_attrs, &dummy_attr.custom_attrs);
 
 				path.peer = pi->peer;
 				path.attr = &dummy_attr;

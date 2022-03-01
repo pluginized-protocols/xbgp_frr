@@ -58,23 +58,6 @@
 #include "bgp_mac.h"
 #include "bgp_ubpf_attr.h"
 
-/* taken from https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/ */
-#define iterate_bitset_begin(bitmap, bitmapsize, idx) do {     \
-    uint64_t bitset;                          \
-    for (size_t k = 0; k < (bitmapsize); ++k) { \
-        bitset = (bitmap)[k];                   \
-        while (bitset != 0) {                 \
-            uint64_t t = bitset & -bitset;    \
-            int r = __builtin_ctzl(bitset);   \
-            (idx) = k * 64 + r;
-
-#define iterate_bitset_end \
-            bitset ^= t;   \
-        }                  \
-    }                      \
-} while(0)
-
-
 
 /* Attribute strings for logging. */
 static const struct message attr_str[] = {
@@ -544,12 +527,8 @@ unsigned int attrhash_key_make(const void *p)
 	MIX3(attr->nh_ifindex, attr->nh_lla_ifindex, attr->distance);
 	MIX(attr->rmap_table_id);
 
-    struct rte_attr *find;
-    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
-        HASH_FIND_INT(attr->custom_attrs, &idx, find);
-        assert(find != NULL);
-        MIX(ubpf_attr_hash_make(find->attr));
-    } iterate_bitset_end;
+    if (attr->custom_attrs)
+        MIX(rte_attr_hash_make(attr->custom_attrs));
 
 	return key;
 }
@@ -594,24 +573,8 @@ bool attrhash_cmp(const void *p1, const void *p2)
 		    && overlay_index_same(attr1, attr2)
 		    && attr1->nh_ifindex == attr2->nh_ifindex
 		    && attr1->nh_lla_ifindex == attr2->nh_lla_ifindex
-		    && attr1->distance == attr2->distance) {
-
-            /* check custom attrs */
-            if (memcmp(attr1->bitset_custom_attrs,
-                       attr2->bitset_custom_attrs,
-                       sizeof(attr1->bitset_custom_attrs)) != 0) {
-                return false;
-            }
-
-            struct rte_attr *cattr1, *cattr2;
-            iterate_bitset_begin(attr1->bitset_custom_attrs, 4, idx) {
-                HASH_FIND_INT(attr1->custom_attrs, &idx, cattr1);
-                HASH_FIND_INT(attr2->custom_attrs, &idx, cattr2);
-                assert(cattr1 != NULL && cattr2 != NULL);
-                if (cattr1->attr != cattr2->attr) {
-                    return false;
-                }
-            } iterate_bitset_end;
+		    && attr1->distance == attr2->distance
+            && attr1->custom_attrs == attr2->custom_attrs) {
 
             return true;
         }
@@ -666,7 +629,6 @@ static void *bgp_attr_hash_alloc(void *p)
 
 	attr = XMALLOC(MTYPE_ATTR, sizeof(struct attr));
 	*attr = *val;
-    custom_attr_cpy(val->custom_attrs, &attr->custom_attrs);
 	if (val->encap_subtlvs) {
 		val->encap_subtlvs = NULL;
 	}
@@ -732,14 +694,11 @@ struct attr *bgp_attr_intern(struct attr *attr)
 	}
 
     /* intern now custom attr created by plugins (if any) */
-    struct rte_attr *cattr, *ctmpattr;
-    struct custom_attr *interned_attr;
-    HASH_ITER(hh, attr->custom_attrs, cattr, ctmpattr) {
-        if (!cattr->attr->refcount) {
-            interned_attr = ubpf_attr_intern(cattr->attr);
-            cattr->attr = interned_attr;
+    if (attr->custom_attrs) {
+        if (!attr->custom_attrs->refcount) {
+            attr->custom_attrs = rte_attr_intern(attr->custom_attrs);
         } else {
-            cattr->attr->refcount += 1;
+            attr->custom_attrs->refcount += 1;
         }
     }
 
@@ -930,13 +889,9 @@ void bgp_attr_unintern_sub(struct attr *attr)
 	if (attr->encap_subtlvs)
 		encap_unintern(&attr->encap_subtlvs, ENCAP_SUBTLV_TYPE);
 
-    struct rte_attr *rt_attr, *rt_attr_tmp;
-    HASH_ITER(hh, attr->custom_attrs, rt_attr, rt_attr_tmp) {
-        unset_index(attr->bitset_custom_attrs, rt_attr->code);
-        ubpf_attr_unintern(&rt_attr->attr);
-        HASH_DEL(attr->custom_attrs, rt_attr);
-        XFREE(MTYPE_UBPF_ATTR, rt_attr);
-    }
+    if (attr->custom_attrs)
+        rte_attr_unintern(&attr->custom_attrs);
+
 
 #if ENABLE_BGP_VNC
 	if (attr->vnc_subtlvs)
@@ -3790,8 +3745,8 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
     unsigned int idx;
 	int my_one = 1;
 
-    iterate_bitset_begin(attr->bitset_custom_attrs, 4, idx) {
-        HASH_FIND_INT(attr->custom_attrs, &idx, plug_attr);
+    iterate_bitset_begin(attr->custom_attrs->bitset_attrs, 4, idx) {
+        HASH_FIND_INT(attr->custom_attrs->head_hash, &idx, plug_attr);
         assert(plug_attr != NULL);
         entry_arg_t attr_args[] = {
                 {.arg = &plug_attr->attr->pattr, .len=sizeof(struct path_attribute) +

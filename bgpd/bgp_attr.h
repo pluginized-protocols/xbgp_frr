@@ -220,9 +220,7 @@ struct attr {
 	/* rmap set table */
 	uint32_t rmap_table_id;
 
-#define custom_attrs_len(attr) (sizeof((attr)->custom_attrs) / sizeof((attr)->custom_attrs[0]))
-	uint64_t bitset_custom_attrs[4]; // bit set for custom_attrs
-    struct rte_attr *custom_attrs;
+    struct rte_attr_hash *custom_attrs;
 
 	//mem_pool *ubpf_mempool; // used for new attributes
 };

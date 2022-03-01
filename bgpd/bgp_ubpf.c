@@ -350,7 +350,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     memcpy(attr->pattr.data, decoded_attr, length);
 
     if (!frr_attr->custom_attrs) {
-        XCALLOC(MTYPE_UBPF_ATTR, sizeof(*frr_attr->custom_attrs));
+        frr_attr->custom_attrs = XCALLOC(MTYPE_UBPF_ATTR, sizeof(*frr_attr->custom_attrs));
     }
 
     HASH_ADD_INT(frr_attr->custom_attrs->head_hash, code, rt_attr);

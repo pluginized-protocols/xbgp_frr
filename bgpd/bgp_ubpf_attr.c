@@ -90,17 +90,15 @@ void ubpf_attr_unintern(struct custom_attr **attr) {
 void custom_attr_cpy(struct rte_attr *rta_old, struct rte_attr **rta_new) {
     struct rte_attr *rta, *rta_tmp;
     struct rte_attr *rta_cpy;
-
-    /* reset hash custom attr new */
-    *rta_new = NULL;
+    struct rte_attr *rta_allcpy = NULL;
 
     HASH_ITER(hh, rta_old, rta, rta_tmp) {
         rta_cpy = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rta_cpy));
-        *rta_cpy = (struct rte_attr) {
-            .code = rta->code,
-            .attr = rta->attr,
-        };
+        rta_cpy->code = rta->code;
+        rta_cpy->attr = rta->attr;
 
-        HASH_ADD_INT(*rta_new, code, rta_cpy);
+        HASH_ADD_INT(rta_allcpy, code, rta_cpy);
     }
+
+    *rta_new = rta_cpy;
 }

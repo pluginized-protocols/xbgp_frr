@@ -508,7 +508,7 @@ unsigned int attrhash_key_make(const void *p)
 {
 	const struct attr *attr = (struct attr *)p;
 	uint32_t key = 0;
-    unsigned long idx;
+    unsigned int idx;
 #define MIX(val)	key = jhash_1word(val, key)
 #define MIX3(a, b, c)	key = jhash_3words((a), (b), (c), key)
 
@@ -666,6 +666,7 @@ static void *bgp_attr_hash_alloc(void *p)
 
 	attr = XMALLOC(MTYPE_ATTR, sizeof(struct attr));
 	*attr = *val;
+    custom_attr_cpy(val->custom_attrs, &attr->custom_attrs);
 	if (val->encap_subtlvs) {
 		val->encap_subtlvs = NULL;
 	}

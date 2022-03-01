@@ -3278,6 +3278,7 @@ int     bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		}
 
 	new_attr = *attr;
+    custom_attr_cpy(attr->custom_attrs, &new_attr.custom_attrs);
 
 	/* Apply incoming route-map.
 	 * NB: new_attr may now contain newly allocated values from route-map
@@ -9346,6 +9347,7 @@ static int bgp_show_table(struct vty *vty, struct bgp *bgp, safi_t safi,
 				route_map_result_t ret;
 
 				dummy_attr = *pi->attr;
+                custom_attr_cpy(pi->attr->custom_attrs, &dummy_attr.custom_attrs);
 
 				path.peer = pi->peer;
 				path.attr = &dummy_attr;

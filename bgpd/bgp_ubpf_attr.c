@@ -100,5 +100,5 @@ void custom_attr_cpy(struct rte_attr *rta_old, struct rte_attr **rta_new) {
         HASH_ADD_INT(rta_allcpy, code, rta_cpy);
     }
 
-    *rta_new = rta_cpy;
+    *rta_new = rta_allcpy;
 }

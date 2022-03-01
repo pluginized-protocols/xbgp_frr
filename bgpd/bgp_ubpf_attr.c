@@ -83,5 +83,24 @@ void ubpf_attr_unintern(struct custom_attr **attr) {
     (*attr)->refcount -= 1;
     if ((*attr)->refcount == 0) {
         XFREE(MTYPE_UBPF_ATTR, *attr);
+        *attr = NULL;
+    }
+}
+
+void custom_attr_cpy(struct rte_attr *rta_old, struct rte_attr **rta_new) {
+    struct rte_attr *rta, *rta_tmp;
+    struct rte_attr *rta_cpy;
+
+    /* reset hash custom attr new */
+    *rta_new = NULL;
+
+    HASH_ITER(hh, rta_old, rta, rta_tmp) {
+        rta_cpy = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rta_cpy));
+        *rta_cpy = (struct rte_attr) {
+            .code = rta->code,
+            .attr = rta->attr,
+        };
+
+        HASH_ADD_INT(*rta_new, code, rta_cpy);
     }
 }

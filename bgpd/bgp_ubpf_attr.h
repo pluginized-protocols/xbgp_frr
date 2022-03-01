@@ -26,6 +26,7 @@ struct custom_attr *ubpf_attr_intern(struct custom_attr *attr);
 void ubpf_attr_unintern(struct custom_attr **attr);
 unsigned int ubpf_attr_hash_make(const void *arg);
 bool ubpf_attr_cmp(const void *arg1, const void *arg2);
+void custom_attr_cpy(struct rte_attr *rta_old, struct rte_attr **rta_new);
 
 #define unset_index(bitarray, idx)  do {          \
     (bitarray)[(idx) / 64] &= ~(1 << ((idx) % 64)); \

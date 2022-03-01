@@ -86,6 +86,8 @@
 
 #ifndef VTYSH_EXTRACT_PL
 #include "bgpd/bgp_route_clippy.c"
+#include "bgp_ubpf_attr.h"
+
 #endif
 
 /* Extern from bgp_dump.c */
@@ -1635,7 +1637,7 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 
     /* For modify attribute, copy it to temporary structure. */
     *attr = *piattr;
-
+    custom_attr_cpy(piattr->custom_attrs, &attr->custom_attrs);
 
 	entry_arg_t args[] = {
             {.arg = from, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
@@ -1873,6 +1875,7 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 		memset(&rmap_path, 0, sizeof(struct bgp_path_info));
 		rmap_path.peer = peer;
 		rmap_path.attr = attr;
+        custom_attr_cpy(attr->custom_attrs, &rmap_path.attr->custom_attrs);
 		rmap_path.net = rn;
 
 		if (pi->extra) {
@@ -1892,6 +1895,7 @@ int subgroup_announce_check(struct bgp_node *rn, struct bgp_path_info *pi,
 		    && !bgp_flag_check(bgp,
 				       BGP_FLAG_RR_ALLOW_OUTBOUND_POLICY)) {
 			dummy_attr = *attr;
+            custom_attr_cpy(attr->custom_attrs, &dummy_attr.custom_attrs);
 			rmap_path.attr = &dummy_attr;
 		}
 

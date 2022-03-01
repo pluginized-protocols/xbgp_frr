@@ -162,10 +162,7 @@ struct rte_attr_hash *rte_attr_intern(struct rte_attr_hash *rte_attr) {
     /* intern all custom attrs */
     HASH_ITER(hh, rte_attr->head_hash, rta, rta_tmp) {
         custom_find = ubpf_attr_intern(rta->attr);
-        if (custom_find != rta->attr) {
-            XFREE(MTYPE_UBPF_ATTR, rta->attr);
-            rta->attr = custom_find;
-        }
+        rta->attr = custom_find;
     }
 
     find = hash_get(hash_attr, rte_attr, hash_alloc_intern);

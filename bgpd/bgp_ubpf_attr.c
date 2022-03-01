@@ -145,7 +145,7 @@ static inline void free_rte_hash(struct rte_attr_hash **rte_hash) {
         ubpf_attr_unintern(&rta->attr);
         XFREE(MTYPE_UBPF_ATTR, rta);
     }
-    XFREE(MTYPE_UBPF_ATTR, rte_hash);
+    XFREE(MTYPE_UBPF_ATTR, *rte_hash);
     *rte_hash = NULL;
 }
 

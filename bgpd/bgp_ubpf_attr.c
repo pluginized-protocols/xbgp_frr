@@ -185,18 +185,20 @@ void rte_attr_unintern(struct rte_attr_hash **rte_attr) {
     }
 }
 
-void custom_attr_cpy__(struct rte_attr *rta_old, struct rte_attr **rta_new) {
-    struct rte_attr *rta, *rta_tmp;
-    struct rte_attr *rta_cpy;
-    struct rte_attr *rta_allcpy = NULL;
+struct rte_attr_hash *custom_attr_cpy(struct rte_attr_hash *rta_old) {
+    struct rte_attr_hash *new_hash;
+    struct rte_attr *rta, *rta_tmp, *rta_cpy;
 
-    HASH_ITER(hh, rta_old, rta, rta_tmp) {
+    new_hash = XCALLOC(MTYPE_UBPF_ATTR, sizeof(*new_hash));
+    memcpy(new_hash->bitset_attrs,  new_hash->bitset_attrs, sizeof(new_hash->bitset_attrs));
+
+    HASH_ITER(hh, rta_old->head_hash, rta, rta_tmp) {
         rta_cpy = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rta_cpy));
         rta_cpy->code = rta->code;
         rta_cpy->attr = rta->attr;
 
-        HASH_ADD_INT(rta_allcpy, code, rta_cpy);
+        HASH_ADD_INT(new_hash->head_hash, code, rta_cpy);
     }
 
-    *rta_new = rta_allcpy;
+    return new_hash;
 }

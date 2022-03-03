@@ -8,7 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <xbgp_compliant_api/xbgp_defs.h>
-#include "uthash.h"
+#include "utlist.h"
 
 /* taken from https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/ */
 #define iterate_bitset_begin(bitmap, bitmapsize, idx) do {     \
@@ -32,18 +32,19 @@ struct custom_attr {
 };
 
 struct rte_attr {
-    UT_hash_handle hh;
+    struct rte_attr *prev;
+    struct rte_attr *next;
     int code;
     struct custom_attr *attr;
 };
 
 struct rte_attr_hash {
     unsigned long refcount;
-    uint64_t bitset_attrs[4];
+    int nb_elems;
     struct rte_attr *head_hash;
 };
 
-
+int rte_attr_cmp(const struct rte_attr *attr1, const struct rte_attr *attr2);
 struct custom_attr *ubpf_attr_intern(struct custom_attr *attr);
 void ubpf_attr_unintern(struct custom_attr **attr);
 unsigned int ubpf_attr_hash_make(const void *arg);

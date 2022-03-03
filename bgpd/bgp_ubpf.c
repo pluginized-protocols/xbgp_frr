@@ -330,7 +330,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     struct attr *frr_attr;
     struct custom_attr *attr;
     struct rte_attr *rt_attr;
-    struct rte_attr *rt_replaced;
+    struct rte_attr *rt_find;
     frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
     if (!frr_attr) return -1;
 
@@ -362,12 +362,14 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
         assert(frr_attr->custom_attrs->refcount == 0);
     }
 
-    HASH_REPLACE_INT(frr_attr->custom_attrs->head_hash, code, rt_attr, rt_replaced);
-    if (rt_replaced) {
-        XFREE(MTYPE_UBPF_ATTR, rt_replaced);
+    DL_SEARCH(frr_attr->custom_attrs->head_hash, rt_find, rt_attr, rte_attr_cmp);
+    if (rt_find) {
+        DL_DELETE(frr_attr->custom_attrs->head_hash, rt_find);
+        XFREE(MTYPE_UBPF_ATTR, rt_find);
+        frr_attr->custom_attrs -= 1;
     }
 
-    set_index(frr_attr->custom_attrs->bitset_attrs, code);
+    DL_APPEND(frr_attr->custom_attrs->head_hash, rt_find);
     return 0;
 }
 
@@ -475,6 +477,8 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, int code, int a
     struct attr *frr_attr = NULL;
     struct path_attribute *mempool_attr, *ret_attr;
     struct rte_attr *find = NULL;
+    struct rte_attr to_find;
+    to_find.code = code;
 
     switch (args_rte) {
         case ARG_BGP_ROUTE_NEW:
@@ -493,7 +497,7 @@ static struct path_attribute *get_attr_by_code__(context_t *ctx, int code, int a
     if (!frr_attr) return NULL;
     /* 1. check first attr is in custom_attr */
     if (frr_attr->custom_attrs) {
-        HASH_FIND_INT(frr_attr->custom_attrs->head_hash, &code, find);
+        DL_SEARCH(frr_attr->custom_attrs->head_hash, find, &to_find, rte_attr_cmp);
     }
 
     if (find) {

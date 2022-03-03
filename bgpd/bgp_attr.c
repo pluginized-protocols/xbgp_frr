@@ -3745,8 +3745,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
     unsigned int idx;
 	int my_one = 1;
 
-    iterate_bitset_begin(attr->custom_attrs->bitset_attrs, 4, idx) {
-        HASH_FIND_INT(attr->custom_attrs->head_hash, &idx, plug_attr);
+    DL_FOREACH(attr->custom_attrs->head_hash, plug_attr) {
         assert(plug_attr != NULL);
         entry_arg_t attr_args[] = {
                 {.arg = &plug_attr->attr->pattr, .len=sizeof(struct path_attribute) +
@@ -3763,7 +3762,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
         }, {
                               // todo check value written length announced and byte written (invalid length)
                           });
-    } iterate_bitset_end;
+    }
 
 	/* Unknown transit attribute. */
 	if (attr->transit)

@@ -369,7 +369,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
         frr_attr->custom_attrs -= 1;
     }
 
-    DL_APPEND(frr_attr->custom_attrs->head_hash, rt_find);
+    DL_APPEND(frr_attr->custom_attrs->head_hash, rt_attr);
     return 0;
 }
 

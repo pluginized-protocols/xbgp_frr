@@ -23,8 +23,12 @@ inline int rte_attr_cmp(const struct rte_attr *attr1, const struct rte_attr *att
 }
 
 inline unsigned int ubpf_attr_hash_make(const void *arg) {
-    const struct custom_attr *cattr = arg;
-    return jhash(cattr->pattr.data, cattr->pattr.length, 0xcafebabe + cattr->pattr.code);
+    uint32_t my_hash;
+    struct custom_attr *cattr = (void *) arg; // gcc silent this
+    my_hash = jhash(cattr->pattr.data, cattr->pattr.length, 0xcafebabe + cattr->pattr.code);
+
+    cattr->cached_hash = my_hash;
+    return my_hash;
 }
 
 inline bool ubpf_attr_cmp(const void *arg1, const void *arg2) {
@@ -56,7 +60,8 @@ inline unsigned int rte_attr_hash_make(const void *arg) {
     uint32_t key = 0xc0ffee;
 
     DL_FOREACH(rte_hash->head_hash, rta) {
-        key = jhash_1word(ubpf_attr_hash_make(rta->attr), key);
+        /* hash precomputed at attribute creation */
+        key = jhash_1word(rta->attr->cached_hash, key);
     }
     return key;
 }

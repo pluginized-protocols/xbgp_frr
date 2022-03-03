@@ -28,6 +28,7 @@
 
 struct custom_attr {
     unsigned long refcount;
+    uint32_t cached_hash;
     struct path_attribute pattr;
 };
 

@@ -3755,17 +3755,19 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
             entry_arg_null
     };
 
-    DL_FOREACH(attr->custom_attrs->head_hash, plug_attr) {
-        assert(plug_attr != NULL);
-        attr_args[0] = (entry_arg_t) {.arg = &plug_attr->attr->pattr,
-                                      .len=sizeof(struct path_attribute) + plug_attr->attr->pattr.length,
-                                              .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE};
+    if (attr->custom_attrs) {
+        DL_FOREACH(attr->custom_attrs->head_hash, plug_attr) {
+            assert(plug_attr != NULL);
+            attr_args[0] = (entry_arg_t) {.arg = &plug_attr->attr->pattr,
+                    .len=sizeof(struct path_attribute) + plug_attr->attr->pattr.length,
+                    .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE};
 
-        CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
-            // fail
-        }, {
-                              // todo check value written length announced and byte written (invalid length)
-                          });
+            CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
+                // fail
+            }, {
+                                  // todo check value written length announced and byte written (invalid length)
+            });
+        }
     }
 
     /* special encode insertion point */

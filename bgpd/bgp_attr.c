@@ -3746,7 +3746,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
 	int my_one = 1;
 
     entry_arg_t attr_args[] = {
-            {},
+            {.kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE}, // MUST instantiate this cell to avoid wrong gen of attrs
             {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
             {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
             {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
@@ -3771,7 +3771,7 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
     }
 
     /* special encode insertion point */
-    attr_args[0] = (entry_arg_t) {};
+    attr_args[0] = (entry_arg_t) {.kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE}; // MUST instantiate this cell to avoid wrong gen of attrs;
     CALL_REPLACE_ONLY(BGP_ENCODE_CUSTOM_ATTR, attr_args, ret_val_check_encode_attr, {
         // fail
     }, {

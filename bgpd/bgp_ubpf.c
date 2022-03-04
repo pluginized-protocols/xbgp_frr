@@ -610,7 +610,7 @@ struct ubpf_peer_info *get_peer_info(context_t *ctx, int *nb_peers) { // array o
 
     for (i = 0; i < *peer_count; i++) {
         fill_peer_info(ubpf_peers + i, peers[i], 0);
-        fill_peer_info(local_sessions + i, peers[i], 0);
+        fill_peer_info(local_sessions + i, peers[i], 1);
 
         ubpf_peers[i].local_bgp_session = local_sessions + i;
     }

@@ -3745,17 +3745,21 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
     unsigned int idx;
 	int my_one = 1;
 
+    entry_arg_t attr_args[] = {
+            {},
+            {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
+            {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
+            {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
+            {.arg = from, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEER_SRC},
+            {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            entry_arg_null
+    };
+
     DL_FOREACH(attr->custom_attrs->head_hash, plug_attr) {
         assert(plug_attr != NULL);
-        entry_arg_t attr_args[] = {
-                {.arg = &plug_attr->attr->pattr, .len=sizeof(struct path_attribute) +
-                        plug_attr->attr->pattr.length, .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE},
-                {.arg = s, .len=sizeof(struct stream), .kind=kind_hidden, .type=WRITE_STREAM},
-                {.arg = &peer, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO},
-                {.arg = &my_one, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEERS_TO_COUNT},
-                {.arg = from, .len = sizeof(uintptr_t), .kind=kind_hidden, .type=PEER_SRC},
-                entry_arg_null
-        };
+        attr_args[0] = (entry_arg_t) {.arg = &plug_attr->attr->pattr,
+                                      .len=sizeof(struct path_attribute) + plug_attr->attr->pattr.length,
+                                              .kind= kind_hidden, .type=ARG_BGP_ATTRIBUTE};
 
         CALL_REPLACE_ONLY(BGP_ENCODE_ATTR, attr_args, ret_val_check_encode_attr, {
             // fail
@@ -3763,6 +3767,14 @@ bgp_size_t bgp_packet_attribute(struct bgp *bgp, struct peer *peer,
                               // todo check value written length announced and byte written (invalid length)
                           });
     }
+
+    /* special encode insertion point */
+    attr_args[0] = (entry_arg_t) {};
+    CALL_REPLACE_ONLY(BGP_ENCODE_CUSTOM_ATTR, attr_args, ret_val_check_encode_attr, {
+        // fail
+    }, {
+
+    });
 
 	/* Unknown transit attribute. */
 	if (attr->transit)

@@ -426,14 +426,9 @@ do {                                                        \
 
 static inline struct path_attribute *
 frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
-    uint8_t *buf;
+    unsigned char buf[MAX_BUF_LEN];
     int data_attr_len;
     struct path_attribute *attr;
-
-    buf = malloc(MAX_BUF_LEN);
-    if (!buf) {
-        return NULL;
-    }
 
     switch (code) {
         case BGP_ATTR_ORIGIN:
@@ -466,10 +461,9 @@ frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
     attr->length = data_attr_len;
     memcpy(attr->data, buf, data_attr_len);
     attr->flags = michel[code].flags;
-    free(buf);
+
     return attr;
     err:
-    free(buf);
     return NULL;
 }
 

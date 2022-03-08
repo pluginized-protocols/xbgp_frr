@@ -67,15 +67,15 @@ static int set_as4path(struct path_attribute *ubpf_attr, struct attr *host_attr)
 }
 
 #define u32_attr_fn(field, id) \
-static ssize_t conv_##field (struct attr *host_attr, uint8_t *buf, size_t buf_len) { \
-    if (buf_len < sizeof(host_attr->nexthop)) { \
-        return -1; \
-    }                      \
-    if (!(host_attr->flag & ATTR_FLAG_BIT(id)))  {              \
-      return -1;                       \
-    }\
-    memcpy(buf, &host_attr->field, sizeof(host_attr->field))       ;                \
-    return sizeof(uint32_t); \
+static inline ssize_t conv_##field (struct attr *host_attr, uint8_t *buf, size_t buf_len) { \
+    if (!(host_attr->flag & ATTR_FLAG_BIT(id)))  {                                          \
+      return -1;                                                                            \
+    }                                                                                       \
+    if (buf_len < sizeof(host_attr->nexthop)) {                                             \
+        return -1;                                                                          \
+    }                                                                                       \
+    memcpy(buf, &host_attr->field, sizeof(host_attr->field))       ;                        \
+    return sizeof(uint32_t);                                                                \
 }
 
 u32_attr_fn(nexthop, BGP_ATTR_NEXT_HOP)
@@ -89,7 +89,7 @@ u32_attr_fn(originator_id, BGP_ATTR_ORIGINATOR_ID)
 #define set_u32_attr_fn(field, attr_code)                                          \
 static int set_##field(struct path_attribute *ubpf_attr, struct attr *host_attr) { \
     uint32_t conv_u32val;                                                          \
-    if (ubpf_attr->code != attr_code) {                                            \
+    if (ubpf_attr->code != (attr_code)) {                                          \
         return -1;                                                                 \
     }                                                                              \
     memcpy(&conv_u32val, ubpf_attr->data, sizeof(uint32_t));                       \
@@ -427,32 +427,18 @@ do {                                                        \
 static inline struct path_attribute *
 frr_to_ubpf_attr(context_t *ctx, uint8_t code, struct attr *frr_attr) {
     unsigned char buf[MAX_BUF_LEN];
-    int data_attr_len;
+    ssize_t data_attr_len;
     struct path_attribute *attr;
+    ssize_t (*conv_attr) (struct attr*, uint8_t *, size_t);
+    size_t michel_len;
 
-    switch (code) {
-        case BGP_ATTR_ORIGIN:
-        case BGP_ATTR_AS4_PATH:
-        case BGP_ATTR_AS_PATH:
-        case BGP_ATTR_NEXT_HOP:
-        case BGP_ATTR_MULTI_EXIT_DISC:
-        case BGP_ATTR_LOCAL_PREF:
-        case BGP_ATTR_ATOMIC_AGGREGATE:
-        case BGP_ATTR_AGGREGATOR:
-        case BGP_ATTR_AS4_AGGREGATOR:
-        case BGP_ATTR_COMMUNITIES:
-        case BGP_ATTR_LARGE_COMMUNITIES:
-        case BGP_ATTR_ORIGINATOR_ID:
-        case BGP_ATTR_CLUSTER_LIST:
-        case BGP_ATTR_EXT_COMMUNITIES:
-            data_attr_len = michel[code].conv_attr(frr_attr, buf, MAX_BUF_LEN);
-            if (data_attr_len == -1) goto err;
-            break;
-        case BGP_ATTR_MP_REACH_NLRI:   // MP-BGP is handled in a special way.
-        case BGP_ATTR_MP_UNREACH_NLRI: // They are treated directly in the UPDATE process
-        default:
-            return NULL; //not handled !
+    michel_len = sizeof(michel) / sizeof(michel[0]);
+    if (code > michel_len || !(conv_attr = michel[code].conv_attr)) {
+        return NULL;
     }
+
+    data_attr_len = conv_attr(frr_attr, buf, MAX_BUF_LEN);
+    if (data_attr_len == -1) goto err;
 
     attr = ctx_malloc(ctx, sizeof(struct path_attribute) + data_attr_len);
     if (!attr) goto err;

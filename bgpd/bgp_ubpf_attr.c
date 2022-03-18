@@ -71,6 +71,13 @@ static inline bool rte_attr_hash_cmp(const void *arg1, const void *arg2) {
     const struct rte_attr_hash *attrs2 = arg2;
     struct rte_attr *rta1, *rta2;
 
+    if (attrs1 == NULL && attrs2 == NULL) {
+        return true;
+    }
+    if (attrs1 == NULL || attrs2 == NULL) {
+        return false;
+    }
+
     /* check custom attrs */
     if (attrs1->nb_elems != attrs2->nb_elems) return false;
 
@@ -126,6 +133,7 @@ struct custom_attr *ubpf_attr_intern(struct custom_attr *attr) {
 }
 
 void ubpf_attr_unintern(struct custom_attr **attr) {
+    if (!*attr) return;
     (*attr)->refcount -= 1;
     if ((*attr)->refcount == 0) {
         XFREE(MTYPE_UBPF_ATTR, *attr);
@@ -175,7 +183,7 @@ struct rte_attr_hash *rte_attr_intern(struct rte_attr_hash *rte_attr) {
 }
 
 void rte_attr_unintern(struct rte_attr_hash **rte_attr) {
-    struct rte_attr *rta, *rta_tmp;
+    if (!*rte_attr) return;
     (*rte_attr)->refcount -= 1;
 
     // HERE UNINTERN CUSTOM ATTRS ?

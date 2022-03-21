@@ -133,9 +133,14 @@ struct custom_attr *ubpf_attr_intern(struct custom_attr *attr) {
 }
 
 void ubpf_attr_unintern(struct custom_attr **attr) {
+    struct custom_attr *ret;
     if (!*attr) return;
-    (*attr)->refcount -= 1;
+    if ((*attr)->refcount) {
+        (*attr)->refcount -= 1;
+    }
     if ((*attr)->refcount == 0) {
+        ret = hash_release(attrs[(*attr)->pattr.code], *attr);
+        assert(ret != NULL);
         XFREE(MTYPE_UBPF_ATTR, *attr);
         *attr = NULL;
     }
@@ -165,11 +170,11 @@ struct rte_attr_hash *rte_attr_intern(struct rte_attr_hash *rte_attr) {
         attr_hash_init();
     }
 
-    /* intern all custom attrs */
-    DL_FOREACH_SAFE(rte_attr->head_hash, rta, rta_tmp) {
+    /* NO ! done at attr creation ! intern all custom attrs */
+    /*DL_FOREACH_SAFE(rte_attr->head_hash, rta, rta_tmp) {
         custom_find = ubpf_attr_intern(rta->attr);
         rta->attr = custom_find;
-    }
+    }*/
 
     DL_SORT(rte_attr->head_hash, rte_attr_cmp);
 
@@ -183,12 +188,21 @@ struct rte_attr_hash *rte_attr_intern(struct rte_attr_hash *rte_attr) {
 }
 
 void rte_attr_unintern(struct rte_attr_hash **rte_attr) {
+    struct rte_attr_hash *attr;
+    struct rte_attr_hash *ret;
     if (!*rte_attr) return;
-    (*rte_attr)->refcount -= 1;
+
+    attr = *rte_attr;
+
+    if (attr->refcount) {
+        attr->refcount -= 1;
+    }
 
     // HERE UNINTERN CUSTOM ATTRS ?
 
-    if ((*rte_attr)->refcount == 0) {
+    if (attr->refcount == 0) {
+        ret = hash_release(hash_attr, *rte_attr);
+        assert(ret != NULL);
         free_rte_hash(rte_attr);
     }
 }
@@ -199,8 +213,9 @@ struct rte_attr_hash *custom_attr_cpy(struct rte_attr_hash *rta_old) {
 
     new_hash = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*new_hash));
 
+    new_hash->head_hash = NULL;
     new_hash->nb_elems = rta_old->nb_elems;
-    new_hash->refcount = rta_old->refcount;
+    new_hash->refcount = 0; // rta_old->refcount;
 
     DL_FOREACH(rta_old->head_hash, rta) {
         rta_cpy = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rta_cpy));
@@ -209,6 +224,7 @@ struct rte_attr_hash *custom_attr_cpy(struct rte_attr_hash *rta_old) {
 
         /* already sorted, now need to sort */
         DL_APPEND(new_hash->head_hash, rta_cpy);
+        rta->attr->refcount += 1;
     }
 
     return new_hash;

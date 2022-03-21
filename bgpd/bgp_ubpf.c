@@ -342,13 +342,13 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     attr->pattr.length = length;
     attr->refcount = 0;
 
-    rt_attr->attr = attr;
-    rt_attr->code = code;
-
     // if the attribute is decoded by one plugin on DECODE side
     // there must be a plugin to decode it on ENCODE side.
     // the attribute is not handled by FRRouting anymore !
     memcpy(attr->pattr.data, decoded_attr, length);
+
+    rt_attr->attr = ubpf_attr_intern(attr);
+    rt_attr->code = code;
 
     if (!frr_attr->custom_attrs) {
         frr_attr->custom_attrs = XCALLOC(MTYPE_UBPF_ATTR, sizeof(*frr_attr->custom_attrs));
@@ -366,7 +366,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     if (rt_find) {
         DL_DELETE(frr_attr->custom_attrs->head_hash, rt_find);
         XFREE(MTYPE_UBPF_ATTR, rt_find);
-        frr_attr->custom_attrs -= 1;
+        //frr_attr->custom_attrs -= 1;
     }
 
     DL_APPEND(frr_attr->custom_attrs->head_hash, rt_attr);

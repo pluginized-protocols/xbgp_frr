@@ -3167,9 +3167,11 @@ int     bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 		    && pi->addpath_rx_id == addpath_id)
 			break;
 
+    new_attr = *attr;
+
 	entry_arg_t args[] = {
             {.arg = peer, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = PEER_SRC},
-            {.arg = attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
+            {.arg = &new_attr, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_ATTRIBUTE_LIST},
             {.arg = p, .len = sizeof(uintptr_t), .kind = kind_hidden, .type = ARG_BGP_PREFIX},
             entry_arg_null,
 	};
@@ -3273,8 +3275,6 @@ int     bgp_update(struct peer *peer, struct prefix *p, uint32_t addpath_id,
 				"as-path contains AS_SET or AS_CONFED_SET type;";
 			goto filtered;
 		}
-
-	new_attr = *attr;
 
 	/* Apply incoming route-map.
 	 * NB: new_attr may now contain newly allocated values from route-map

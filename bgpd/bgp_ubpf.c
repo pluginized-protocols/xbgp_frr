@@ -145,9 +145,12 @@ static int set_aggregator4(struct path_attribute *ubpf_attr, struct attr *host_a
     return set_aggregator_(ubpf_attr, host_attr, 1);
 }
 
-#define communities_func(community_type, size_community) \
-static ssize_t conv_##community_type (struct attr *host_attr, uint8_t *buf, size_t buf_len) {\
-    uint16_t tot_len = host_attr->community_type->size * size_community;\
+#define communities_func(community_type, size_community, id) \
+static ssize_t conv_##community_type (struct attr *host_attr, uint8_t *buf, size_t buf_len) { \
+    if (!(host_attr->flag & ATTR_FLAG_BIT(id)))  {                                          \
+      return -1;                                                                            \
+    } \
+    uint16_t tot_len = host_attr->community_type->size * (size_community);\
     if (tot_len > buf_len) {\
         return -1;\
     }\
@@ -155,11 +158,11 @@ static ssize_t conv_##community_type (struct attr *host_attr, uint8_t *buf, size
     return tot_len;\
 }
 
-communities_func(community, 4)
+communities_func(community, 4, BGP_ATTR_COMMUNITIES)
 
-communities_func(lcommunity, 6)
+communities_func(lcommunity, 6, BGP_ATTR_LARGE_COMMUNITIES)
 
-communities_func(ecommunity, 8)
+communities_func(ecommunity, 8, BGP_ATTR_EXT_COMMUNITIES)
 
 
 static ssize_t conv_cluster_list(struct attr *host_attr, uint8_t *buf, size_t buf_len) {

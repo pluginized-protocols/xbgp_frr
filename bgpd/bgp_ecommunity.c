@@ -162,7 +162,7 @@ int set_ubpf_ecommunity(uint8_t code, uint8_t flags, uint16_t length, uint8_t *d
     struct ecommunity tmp;
     struct ecommunity *new;
 
-    tmp.size = length;
+    tmp.size = length / ECOMMUNITY_SIZE;
     tmp.val = decoded_attr;
     new = ecommunity_uniq_sort(&tmp);
 

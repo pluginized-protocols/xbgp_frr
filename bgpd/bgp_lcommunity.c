@@ -149,7 +149,7 @@ int set_ubpf_lcommunity(uint8_t code, uint8_t flags, uint16_t length, uint8_t *d
     struct lcommunity tmp;
     struct lcommunity *new;
 
-    tmp.size = length;
+    tmp.size = length / LCOMMUNITY_SIZE;
     tmp.val = decoded_attr;
     new = lcommunity_uniq_sort(&tmp);
 

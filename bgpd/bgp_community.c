@@ -535,7 +535,7 @@ int set_ubpf_community(uint8_t code, uint8_t flags, uint16_t length, uint8_t *de
     struct community tmp;
     struct community *new;
 
-    tmp.size = length % 4;
+    tmp.size = length / 4;
     tmp.val = (uint32_t *) decoded_attr;
 
     new = community_uniq_sort(&tmp);

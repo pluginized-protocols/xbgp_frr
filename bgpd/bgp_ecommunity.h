@@ -151,7 +151,7 @@ static inline void encode_route_target_as4(as_t as, uint16_t val,
 	eval->val[7] = val & 0xff;
 }
 
-extern int set_ubpf_ecommunity(struct path_attribute *ubpf_attr, struct attr *host_attr);
+extern int set_ubpf_ecommunity(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr);
 extern void ecommunity_init(void);
 extern void ecommunity_finish(void);
 extern void ecommunity_free(struct ecommunity **);

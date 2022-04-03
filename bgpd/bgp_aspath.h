@@ -77,7 +77,7 @@ struct aspath {
 #define ASPATH_STR_DEFAULT_LEN 32
 
 /* Prototypes. */
-extern int ubpf_set_aspath(struct path_attribute *ubpf_attr, struct attr *host_attr, int as4n);
+extern int ubpf_set_aspath(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr, int as4n);
 extern void aspath_init(void);
 extern void aspath_finish(void);
 extern struct aspath *aspath_parse(struct stream *, size_t, int);

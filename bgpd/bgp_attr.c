@@ -1698,11 +1698,11 @@ bgp_attr_cluster_list(struct bgp_attr_parser_args *args)
 	return BGP_ATTR_PARSE_PROCEED;
 }
 
-int set_ubpf_cluster_list(struct path_attribute *ubpf_attr, struct attr *host_attr) {
-    if (ubpf_attr->code != BGP_ATTR_CLUSTER_LIST) {
+int set_ubpf_cluster_list(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr) {
+    if (code != BGP_ATTR_CLUSTER_LIST) {
         return -1;
     }
-    host_attr->cluster = cluster_parse((struct in_addr *)ubpf_attr->data, ubpf_attr->length);
+    host_attr->cluster = cluster_parse((struct in_addr *)decoded_attr, length);
     return 0;
 }
 

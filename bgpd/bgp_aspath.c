@@ -861,8 +861,8 @@ struct aspath *aspath_parse(struct stream *s, size_t length, int use32bit)
 }
 
 
-int ubpf_set_aspath(struct path_attribute *ubpf_attr, struct attr *host_attr, int as4n) {
-    if (ubpf_attr->code != BGP_ATTR_AS_PATH && ubpf_attr->code != BGP_ATTR_AS4_PATH) {
+int ubpf_set_aspath(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr, int as4n) {
+    if (code != BGP_ATTR_AS_PATH && code != BGP_ATTR_AS4_PATH) {
         return -1;
     }
 
@@ -871,11 +871,11 @@ int ubpf_set_aspath(struct path_attribute *ubpf_attr, struct attr *host_attr, in
     struct aspath as, *find;
     int i;
     uint8_t *offset;
-    offset = ubpf_attr->data;
+    offset = decoded_attr;
     uint8_t seg_type, seg_length;
 
     prev = head = NULL;
-    while (offset - ubpf_attr->data < ubpf_attr->length) {
+    while (offset - decoded_attr < length) {
         seg_type = *offset++;
         seg_length = *offset++;
         seg = assegment_new(seg_type, seg_length);

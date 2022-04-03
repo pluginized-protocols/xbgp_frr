@@ -143,14 +143,14 @@ struct lcommunity *lcommunity_parse(uint8_t *pnt, unsigned short length)
 }
 
 
-int set_ubpf_lcommunity(struct path_attribute *ubpf_attr, struct attr *host_attr) {
-    if (ubpf_attr->code != BGP_ATTR_EXT_COMMUNITIES) return -1;
+int set_ubpf_lcommunity(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr) {
+    if (code != BGP_ATTR_EXT_COMMUNITIES) return -1;
 
     struct lcommunity tmp;
     struct lcommunity *new;
 
-    tmp.size = ubpf_attr->length;
-    tmp.val = ubpf_attr->data;
+    tmp.size = length;
+    tmp.val = decoded_attr;
     new = lcommunity_uniq_sort(&tmp);
 
     host_attr->lcommunity = lcommunity_intern(new);

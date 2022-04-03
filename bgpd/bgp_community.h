@@ -68,7 +68,7 @@ struct community {
 #define com_nthval(X,n)  ((X)->val + (n))
 
 /* Prototypes of communities attribute functions.  */
-int set_ubpf_community(struct path_attribute *ubpf_attr, struct attr *host_attr);
+int set_ubpf_community(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr);
 extern void community_init(void);
 extern void community_finish(void);
 extern void community_free(struct community **comm);

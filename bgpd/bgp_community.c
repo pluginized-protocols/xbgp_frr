@@ -530,13 +530,13 @@ struct community *community_parse(uint32_t *pnt, unsigned short length)
 	return community_intern(new);
 }
 
-int set_ubpf_community(struct path_attribute *ubpf_attr, struct attr *host_attr) {
+int set_ubpf_community(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr) {
 
     struct community tmp;
     struct community *new;
 
-    tmp.size = ubpf_attr->length % 4;
-    tmp.val = (uint32_t *) ubpf_attr->data;
+    tmp.size = length % 4;
+    tmp.val = (uint32_t *) decoded_attr;
 
     new = community_uniq_sort(&tmp);
 

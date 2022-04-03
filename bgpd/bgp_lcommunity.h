@@ -54,7 +54,7 @@ struct lcommunity_val {
 #define lcom_length(X)    ((X)->size * LCOMMUNITY_SIZE)
 
 
-extern int set_ubpf_lcommunity(struct path_attribute *ubpf_attr, struct attr *host_attr);
+extern int set_ubpf_lcommunity(uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr, struct attr *host_attr);
 extern void lcommunity_init(void);
 extern void lcommunity_finish(void);
 extern void lcommunity_free(struct lcommunity **);

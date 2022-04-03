@@ -90,6 +90,11 @@ static inline int ret_val_decode_msg(uint64_t val) {
     return val == EXIT_SUCCESS ? 1 : 0;
 }
 
+static inline uint64_t choice_map(uint64_t val) {
+    if (val == 0) return BGP_ROUTE_TYPE_OLD;
+    if (val == 1) return BGP_ROUTE_TYPE_NEW;
+    return  BGP_ROUTE_TYPE_UNKNOWN;
+}
 
 
 #endif //PLUGINIZED_FRR_BGP_UBPF_H

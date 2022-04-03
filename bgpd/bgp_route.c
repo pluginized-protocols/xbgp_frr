@@ -481,23 +481,28 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
     };
 
 	/* 0. Null check. */
-	if (new == NULL) {
-		*reason = bgp_path_selection_none;
-		if (debug)
-			zlog_debug("%s: new is NULL", pfx_buf);
-		return 0;
-	}
+    CALL_ALL(BGP_INITIAL_RTE_DECISION, args, ret_val_rte_decision, choice_map, {
+        if (new == NULL) {
+            *reason = bgp_path_selection_none;
+            if (debug)
+                zlog_debug("%s: new is NULL", pfx_buf);
+            RETURN(0);
+        }
 
-	if (debug)
-		bgp_path_info_path_with_addpath_rx_str(new, new_buf);
+        if (debug)
+            bgp_path_info_path_with_addpath_rx_str(new, new_buf);
 
-	if (exist == NULL) {
-		*reason = bgp_path_selection_first;
-		if (debug)
-			zlog_debug("%s: %s is the initial bestpath", pfx_buf,
-				   new_buf);
-		return 1;
-	}
+        if (exist == NULL) {
+            *reason = bgp_path_selection_first;
+            if (debug)
+                zlog_debug("%s: %s is the initial bestpath", pfx_buf,
+                           new_buf);
+            RETURN(1);
+        }
+    }, {
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) { RETURN(1) }
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) { RETURN(0) }
+    });
 
 	if (debug) {
 		bgp_path_info_path_with_addpath_rx_str(exist, exist_buf);
@@ -601,9 +606,9 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 		}
 	}
 
-    CALL_REPLACE_ONLY(BGP_PRE_DECISION, args, ret_val_rte_decision, {}, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+    CALL_ALL(BGP_PRE_DECISION, args, ret_val_rte_decision, choice_map, {}, {
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) {RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) {RETURN(0);}
     });
 
 	/* 1. Weight check. */
@@ -631,7 +636,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	/* 2. Local preference check. */
 	new_pref = exist_pref = bgp->default_local_pref;
 
-    CALL_REPLACE_ONLY(BGP_LOCAL_PREF_DECISION, args, ret_val_rte_decision, {
+    CALL_ALL(BGP_LOCAL_PREF_DECISION, args, ret_val_rte_decision, choice_map, {
         if (newattr->flag & ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF))
             new_pref = newattr->local_pref;
         if (existattr->flag & ATTR_FLAG_BIT(BGP_ATTR_LOCAL_PREF))
@@ -644,22 +649,21 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                         "%s: %s wins over %s due to localpref %d > %d",
                         pfx_buf, new_buf, exist_buf, new_pref,
                         exist_pref);
-            return 1;
+            RETURN(1);
+        }
+        if (new_pref < exist_pref) {
+            *reason = bgp_path_selection_local_pref;
+            if (debug)
+                zlog_debug(
+                        "%s: %s loses to %s due to localpref %d < %d",
+                        pfx_buf, new_buf, exist_buf, new_pref,
+                        exist_pref);
+            RETURN(0);
         }
     }, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) { RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) { RETURN(0);}
     });
-
-	if (new_pref < exist_pref) {
-		*reason = bgp_path_selection_local_pref;
-		if (debug)
-			zlog_debug(
-				"%s: %s loses to %s due to localpref %d < %d",
-				pfx_buf, new_buf, exist_buf, new_pref,
-				exist_pref);
-		return 0;
-	}
 
 	/* 3. Local route check. We prefer:
 	 *  - BGP_ROUTE_STATIC
@@ -687,7 +691,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 	}
 
 	/* 4. AS path length check. */
-	CALL_REPLACE_ONLY(BGP_AS_PATH_LENGTH_DECISION, args, ret_val_rte_decision, {
+	CALL_ALL(BGP_AS_PATH_LENGTH_DECISION, args, ret_val_rte_decision, choice_map, {
         if (!bgp_flag_check(bgp, BGP_FLAG_ASPATH_IGNORE)) {
             int exist_hops = aspath_count_hops(existattr->aspath);
             int exist_confeds = aspath_count_confeds(existattr->aspath);
@@ -706,7 +710,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                                 pfx_buf, new_buf, exist_buf,
                                 aspath_hops,
                                 (exist_hops + exist_confeds));
-                    return 1;
+                    RETURN(1);
                 }
 
                 if (aspath_hops > (exist_hops + exist_confeds)) {
@@ -717,7 +721,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                                 pfx_buf, new_buf, exist_buf,
                                 aspath_hops,
                                 (exist_hops + exist_confeds));
-                    return 0;
+                    RETURN(0);
                 }
             } else {
                 int newhops = aspath_count_hops(newattr->aspath);
@@ -729,7 +733,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                                 "%s: %s wins over %s due to aspath hopcount %d < %d",
                                 pfx_buf, new_buf, exist_buf,
                                 newhops, exist_hops);
-                    return 1;
+                    RETURN(1);
                 }
 
                 if (newhops > exist_hops) {
@@ -739,18 +743,18 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                                 "%s: %s loses to %s due to aspath hopcount %d > %d",
                                 pfx_buf, new_buf, exist_buf,
                                 newhops, exist_hops);
-                    return 0;
+                    RETURN(0);
                 }
             }
         }
 	}, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) {RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) {RETURN(0);}
 	});
 
 
 	/* 5. Origin check. */
-    CALL_REPLACE_ONLY(BGP_USE_ORIGIN_DECISION, args, ret_val_rte_decision, {
+    CALL_ALL(BGP_USE_ORIGIN_DECISION, args, ret_val_rte_decision, choice_map, {
         if (newattr->origin > existattr->origin) {
             *reason = bgp_path_selection_origin;
             if (debug)
@@ -758,24 +762,24 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                            pfx_buf, new_buf, exist_buf,
                            bgp_origin_long_str[newattr->origin],
                            bgp_origin_long_str[existattr->origin]);
-            return 0;
+            RETURN(0);
+        }
+        if (newattr->origin < existattr->origin) {
+            *reason = bgp_path_selection_origin;
+            if (debug)
+                zlog_debug("%s: %s wins over %s due to ORIGIN %s < %s",
+                           pfx_buf, new_buf, exist_buf,
+                           bgp_origin_long_str[newattr->origin],
+                           bgp_origin_long_str[existattr->origin]);
+            RETURN(1);
         }
     }, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) { RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) { RETURN(0); }
     });
-	if (newattr->origin < existattr->origin) {
-		*reason = bgp_path_selection_origin;
-		if (debug)
-			zlog_debug("%s: %s wins over %s due to ORIGIN %s < %s",
-				   pfx_buf, new_buf, exist_buf,
-				   bgp_origin_long_str[newattr->origin],
-				   bgp_origin_long_str[existattr->origin]);
-		return 1;
-	}
 
 	/* 6. MED check. */
-    CALL_REPLACE_ONLY(BGP_MED_DECISION, args, ret_val_rte_decision, {
+    CALL_ALL(BGP_MED_DECISION, args, ret_val_rte_decision, choice_map, {
         internal_as_route = (aspath_count_hops(newattr->aspath) == 0
                              && aspath_count_hops(existattr->aspath) == 0);
         confed_as_route = (aspath_count_confeds(newattr->aspath) > 0
@@ -798,7 +802,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                             "%s: %s wins over %s due to MED %d < %d",
                             pfx_buf, new_buf, exist_buf, new_med,
                             exist_med);
-                return 1;
+                RETURN(1);
             }
 
             if (new_med > exist_med) {
@@ -808,19 +812,19 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                             "%s: %s loses to %s due to MED %d > %d",
                             pfx_buf, new_buf, exist_buf, new_med,
                             exist_med);
-                return 0;
+                RETURN(0);
             }
         }
     }, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) {RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) {RETURN(0);}
     });
 
 	/* 7. Peer type check. */
 	new_sort = new->peer->sort;
 	exist_sort = exist->peer->sort;
 
-    CALL_REPLACE_ONLY(BGP_PREFER_EXTERNAL_PEER_DECISION, args, ret_val_rte_decision, {
+    CALL_ALL(BGP_PREFER_EXTERNAL_PEER_DECISION, args, ret_val_rte_decision, choice_map, {
         if (new_sort == BGP_PEER_EBGP
             && (exist_sort == BGP_PEER_IBGP || exist_sort == BGP_PEER_CONFED)) {
             *reason = bgp_path_selection_peer;
@@ -828,7 +832,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                 zlog_debug(
                         "%s: %s wins over %s due to eBGP peer > iBGP peer",
                         pfx_buf, new_buf, exist_buf);
-            return 1;
+            RETURN(1);
         }
 
         if (exist_sort == BGP_PEER_EBGP
@@ -838,16 +842,16 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                 zlog_debug(
                         "%s: %s loses to %s due to iBGP peer < eBGP peer",
                         pfx_buf, new_buf, exist_buf);
-            return 0;
+            RETURN(0);
         }
     }, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) {RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) {RETURN(0);}
     });
 
 	/* 8. IGP metric check. */
 	newm = existm = 0;
-	CALL_REPLACE_ONLY(BGP_IGP_COST_DECISION, args, ret_val_rte_decision, {
+	CALL_ALL(BGP_IGP_COST_DECISION, args, ret_val_rte_decision, choice_map, {
         if (new->extra)
             newm = new->extra->igpmetric;
         if (exist->extra)
@@ -911,7 +915,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                     zlog_debug(
                             "%s: %s wins over %s due to confed-external peer > confed-internal peer",
                             pfx_buf, new_buf, exist_buf);
-                return 1;
+                RETURN(1);
             }
 
             if (exist_sort == BGP_PEER_CONFED
@@ -921,7 +925,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                     zlog_debug(
                             "%s: %s loses to %s due to confed-internal peer < confed-external peer",
                             pfx_buf, new_buf, exist_buf);
-                return 0;
+                RETURN(0);
             }
         }
 
@@ -993,11 +997,11 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                             pfx_buf, new_buf, exist_buf);
             }
             *reason = bgp_path_selection_igp_metric;
-            return ret;
+            RETURN(ret);
         }
 	}, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) {RETURN(1);}
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) { RETURN(0);}
 	});
 
 	/* 12. If both paths are external, prefer the path that was received
@@ -1025,7 +1029,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
 		}
 	}
 
-    CALL_REPLACE_ONLY(BGP_ROUTER_ID_DECISION, args, ret_val_rte_decision, {
+    CALL_ALL(BGP_ROUTER_ID_DECISION, args, ret_val_rte_decision, choice_map, {
         /* 13. Router-ID comparision. */
         /* If one of the paths is "stale", the corresponding peer router-id will
          * be 0 and would always win over the other path. If originator id is
@@ -1046,7 +1050,7 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                 zlog_debug(
                         "%s: %s wins over %s due to Router-ID comparison",
                         pfx_buf, new_buf, exist_buf);
-            return 1;
+            RETURN(1);
         }
 
         if (ntohl(new_id.s_addr) > ntohl(exist_id.s_addr)) {
@@ -1055,11 +1059,11 @@ static int bgp_path_info_cmp(struct bgp *bgp, struct bgp_path_info *new,
                 zlog_debug(
                         "%s: %s loses to %s due to Router-ID comparison",
                         pfx_buf, new_buf, exist_buf);
-            return 0;
+            RETURN(0);
         }
     }, {
-        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) return 1;
-        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) return 0;
+        if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_NEW) { RETURN(1); }
+        else if (VM_RETURN_VALUE == BGP_ROUTE_TYPE_OLD) { RETURN(0); }
     });
 
 

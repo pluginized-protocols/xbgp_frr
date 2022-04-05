@@ -24,6 +24,7 @@ enum type {
     PEER_TO,
     PEERS_TO, // update group may concern multiple routers
     PEERS_TO_COUNT,
+    BGP_RTE_NODE,
 };
 
 

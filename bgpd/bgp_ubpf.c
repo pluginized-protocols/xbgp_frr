@@ -1113,3 +1113,72 @@ int peer_session_reset(context_t *ctx, const char *peer_ip) {
     bgp_session_reset(peer);
     return 0;
 }
+
+enum bgp_selection_reason frr_reason_to_xbgp(enum bgp_path_selection_reason reason) {
+    switch (reason) {
+        case bgp_path_selection_none:
+            return bgp_selection_none;
+        case bgp_path_selection_first:
+            return bgp_selection_first;
+        case bgp_path_selection_evpn_sticky_mac:
+        case bgp_path_selection_evpn_seq:
+        case bgp_path_selection_evpn_lower_ip:
+        case bgp_path_selection_weight:
+            return bgp_selection_other;
+        case bgp_path_selection_local_pref:
+            return bgp_selection_local_pref;
+        case bgp_path_selection_local_route:
+            return bgp_selection_local_route;
+        case bgp_path_selection_confed_as_path:
+        case bgp_path_selection_as_path:
+            return bgp_selection_as_path;
+        case bgp_path_selection_origin:
+            return bgp_selection_origin;
+        case bgp_path_selection_med:
+            return bgp_selection_med;
+        case bgp_path_selection_peer:
+            return bgp_selection_peer;
+        case bgp_path_selection_confed:
+            return bgp_selection_other;
+        case bgp_path_selection_igp_metric:
+            return bgp_selection_igp_metric;
+        case bgp_path_selection_older:
+            return bgp_selection_older;
+        case bgp_path_selection_router_id:
+            return bgp_selection_tie_breaker;
+        case bgp_path_selection_cluster_length:
+            return bgp_selection_cluster_length;
+        case bgp_path_selection_stale:
+            return bgp_selection_other;
+        case bgp_path_selection_local_configured:
+            return bgp_selection_other;
+        case bgp_path_selection_neighbor_ip:
+            return bgp_selection_tie_breaker;
+        case bgp_path_selection_default:
+            return bgp_selection_default;
+        default:
+            return bgp_selection_other;
+    }
+}
+
+struct bgp_rte_info *get_route_info(context_t *ctx) {
+    struct bgp_path_info *pi;
+    struct bgp_rte_info *rinfo;
+
+    pi = get_arg_from_type(ctx, ARG_BGP_ROUTE_RIB);
+    if (!pi) {
+        return NULL;
+    }
+
+    rinfo = ctx_malloc(ctx, sizeof(*rinfo));
+
+    if (!rinfo) return NULL;
+
+    *rinfo = (struct bgp_rte_info) {
+        .reason = frr_reason_to_xbgp(pi->net->reason),
+        .type = pi->type,
+        .uptime = bgp_clock() - pi->uptime,
+    };
+
+    return rinfo;
+}

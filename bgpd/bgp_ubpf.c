@@ -425,6 +425,18 @@ int add_attr_to_route(context_t *ctx, uint8_t code, uint8_t flags,
                       uint16_t length, uint8_t *decoded_attr, int rte) {
     struct attr *frr_attr;
 
+    /* convert to internal representation */
+    switch (rte) {
+        case BGP_ROUTE_TYPE_NEW:
+            rte = ARG_BGP_ROUTE_NEW;
+            break;
+        case BGP_ROUTE_TYPE_OLD:
+            rte = ARG_BGP_ROUTE_OLD;
+            break;
+        default:
+            break;
+    }
+
     switch (rte) {
         case ARG_BGP_ROUTE_NEW:
         case ARG_BGP_ROUTE_OLD:

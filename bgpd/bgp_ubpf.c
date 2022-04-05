@@ -387,14 +387,12 @@ int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
     if (!frr_attr->custom_attrs) {
         frr_attr->custom_attrs = XCALLOC(MTYPE_UBPF_ATTR, sizeof(*frr_attr->custom_attrs));
     }
-    /* check if the hashmap is already interned.
-     * if yes, we must copy the hashmap to avoid
+
+    /* We must copy the linked list to avoid
      * modifying routes using the old interned
      * attribute structure */
-    if (frr_attr->custom_attrs->refcount > 0) {
-        frr_attr->custom_attrs = custom_attr_cpy(frr_attr->custom_attrs);
-        assert(frr_attr->custom_attrs->refcount == 0);
-    }
+    frr_attr->custom_attrs = custom_attr_cpy(frr_attr->custom_attrs);
+    assert(frr_attr->custom_attrs->refcount == 0);
 
     DL_SEARCH(frr_attr->custom_attrs->head_hash, rt_find, rt_attr, rte_attr_cmp);
     if (rt_find) {

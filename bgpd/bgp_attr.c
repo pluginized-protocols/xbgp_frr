@@ -2852,10 +2852,6 @@ bgp_attr_parse_ret_t bgp_attr_parse(struct peer *peer, struct attr *attr,
 		}
 	}
 
-    /* intern attributes stored in custom_attrs */
-    if (attr->custom_attrs) {
-        attr->custom_attrs = rte_attr_intern(attr->custom_attrs);
-    }
 
 	/* Check final read pointer is same as end pointer. */
 	if (BGP_INPUT_PNT(peer) != endp) {

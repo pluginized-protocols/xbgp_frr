@@ -810,8 +810,8 @@ static int bgp_rte_node_to_ubpf(context_t *ctx, struct bgp_path_info *pi, struct
     }
 
     fill_peer_info(rte->peer_info, pi->peer, 0);
-    rte->type = pi->type;
-    rte->uptime = bgp_clock() - pi->uptime; // TODO TEST !
+    rte->route_info.type = pi->type;
+    rte->route_info.uptime = bgp_clock() - pi->uptime; // TODO TEST !
     return 0;
 
     err:

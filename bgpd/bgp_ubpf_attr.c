@@ -215,15 +215,16 @@ struct rte_attr_hash *custom_attr_cpy(struct rte_attr_hash *rta_old) {
     new_hash->nb_elems = rta_old ? rta_old->nb_elems : 0;
     new_hash->refcount = 0; // rta_old->refcount;
 
-    DL_FOREACH(rta_old->head_hash, rta) {
-        rta_cpy = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rta_cpy));
-        rta_cpy->code = rta->code;
-        rta_cpy->attr = rta->attr;
+    if (rta_old) {
+        DL_FOREACH(rta_old->head_hash, rta) {
+            rta_cpy = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*rta_cpy));
+            rta_cpy->code = rta->code;
+            rta_cpy->attr = rta->attr;
 
-        /* already sorted, now need to sort */
-        DL_APPEND(new_hash->head_hash, rta_cpy);
-        rta->attr->refcount += 1;
+            /* already sorted, now need to sort */
+            DL_APPEND(new_hash->head_hash, rta_cpy);
+            rta->attr->refcount += 1;
+        }
     }
-
     return new_hash;
 }

@@ -354,12 +354,12 @@ static inline void set_index(uint64_t *bitarray, size_t idx) {
     bitarray[idx / 64] |= (1 << (idx % 64));
 }
 
-int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
-    struct attr *frr_attr;
+int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
+             uint8_t *decoded_attr, struct attr *frr_attr) {
     struct custom_attr *attr;
     struct rte_attr *rt_attr;
     struct rte_attr *rt_find;
-    frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
+
     if (!frr_attr) return -1;
 
     // checks if the attr has already been processed by frrouting.
@@ -396,7 +396,7 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
         assert(frr_attr->custom_attrs->refcount == 0);
     }
 
-    DL_SEARCH(frr_attr->custom_attrs->head_hash, rt_find, rt_attr, rte_attr_cmp);
+            DL_SEARCH(frr_attr->custom_attrs->head_hash, rt_find, rt_attr, rte_attr_cmp);
     if (rt_find) {
         DL_DELETE(frr_attr->custom_attrs->head_hash, rt_find);
         XFREE(MTYPE_UBPF_ATTR, rt_find);
@@ -407,8 +407,43 @@ int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8
     return 0;
 }
 
+int add_attr(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length, uint8_t *decoded_attr) {
+    struct attr *frr_attr;
+    frr_attr = get_arg_from_type(ctx, ARG_BGP_ATTRIBUTE_LIST);
+    if (!frr_attr) return -1;
+
+    return add_attr__(ctx, code, flags, length, decoded_attr, frr_attr);
+}
+
 int set_attr(context_t *ctx, struct path_attribute *attr) {
     return add_attr(ctx, attr->code, attr->flags, attr->length, attr->data);
+}
+
+int add_attr_to_route(context_t *ctx, uint8_t code, uint8_t flags,
+                      uint16_t length, uint8_t *decoded_attr, int rte) {
+    struct attr *frr_attr;
+
+    switch (rte) {
+        case ARG_BGP_ROUTE_NEW:
+        case ARG_BGP_ROUTE_OLD:
+        case ARG_BGP_ROUTE:
+            frr_attr = ((struct bgp_path_info *) get_arg_from_type(ctx, rte))->attr;
+            break;
+        case ARG_BGP_ATTRIBUTE:
+        case ARG_BGP_ATTRIBUTE_LIST:
+            frr_attr = get_arg_from_type(ctx, rte);
+            break;
+        default:
+            return -1;
+    }
+
+    if (!frr_attr) return -1;
+    return add_attr__(ctx, code, flags, length, decoded_attr, frr_attr);
+}
+
+int set_attr_to_route(context_t *ctx, struct path_attribute *attr, int rte) {
+    return add_attr_to_route(ctx, attr->code, attr->flags,
+                             attr->length, attr->data, rte);
 }
 
 struct path_attribute *get_attr(context_t *ctx) {

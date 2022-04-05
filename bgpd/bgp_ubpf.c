@@ -384,10 +384,6 @@ int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
     rt_attr->attr = ubpf_attr_intern(attr);
     rt_attr->code = code;
 
-    if (!frr_attr->custom_attrs) {
-        frr_attr->custom_attrs = XCALLOC(MTYPE_UBPF_ATTR, sizeof(*frr_attr->custom_attrs));
-    }
-
     /* We must copy the linked list to avoid
      * modifying routes using the old interned
      * attribute structure */
@@ -399,6 +395,8 @@ int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
         DL_DELETE(frr_attr->custom_attrs->head_hash, rt_find);
         XFREE(MTYPE_UBPF_ATTR, rt_find);
         //frr_attr->custom_attrs -= 1;
+    } else {
+        frr_attr->custom_attrs->nb_elems += 1;
     }
 
     DL_APPEND(frr_attr->custom_attrs->head_hash, rt_attr);

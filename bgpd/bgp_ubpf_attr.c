@@ -162,8 +162,6 @@ static inline void free_rte_hash(struct rte_attr_hash **rte_hash) {
 
 struct rte_attr_hash *rte_attr_intern(struct rte_attr_hash *rte_attr) {
     struct rte_attr_hash *find;
-    struct custom_attr *custom_find;
-    struct rte_attr *rta, *rta_tmp;
     assert(rte_attr->refcount == 0);
 
     if (!hash_attr) {
@@ -214,7 +212,7 @@ struct rte_attr_hash *custom_attr_cpy(struct rte_attr_hash *rta_old) {
     new_hash = XMALLOC(MTYPE_UBPF_ATTR, sizeof(*new_hash));
 
     new_hash->head_hash = NULL;
-    new_hash->nb_elems = rta_old->nb_elems;
+    new_hash->nb_elems = rta_old ? rta_old->nb_elems : 0;
     new_hash->refcount = 0; // rta_old->refcount;
 
     DL_FOREACH(rta_old->head_hash, rta) {

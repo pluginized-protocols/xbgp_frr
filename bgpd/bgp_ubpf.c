@@ -387,8 +387,10 @@ int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
     /* We must copy the linked list to avoid
      * modifying routes using the old interned
      * attribute structure */
-    frr_attr->custom_attrs = custom_attr_cpy(frr_attr->custom_attrs);
-    assert(frr_attr->custom_attrs->refcount == 0);
+    if (frr_attr->custom_attrs->refcount > 0) {
+        frr_attr->custom_attrs = custom_attr_cpy(frr_attr->custom_attrs);
+        assert(frr_attr->custom_attrs->refcount == 0);
+    }
 
     DL_SEARCH(frr_attr->custom_attrs->head_hash, rt_find, rt_attr, rte_attr_cmp);
     if (rt_find) {
@@ -403,7 +405,7 @@ int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
 
     // we should intern custom_attr here since it has been
     // modified by this function. It seems to be overkill...
-    frr_attr->custom_attrs = rte_attr_intern(frr_attr->custom_attrs);
+    // frr_attr->custom_attrs = rte_attr_intern(frr_attr->custom_attrs);
     return 0;
 }
 

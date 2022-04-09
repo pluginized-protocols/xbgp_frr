@@ -387,7 +387,7 @@ int add_attr__(context_t *ctx, uint8_t code, uint8_t flags, uint16_t length,
     /* We must copy the linked list to avoid
      * modifying routes using the old interned
      * attribute structure */
-    if (frr_attr->custom_attrs->refcount > 0) {
+    if ((!frr_attr->custom_attrs) || frr_attr->custom_attrs->refcount > 0) {
         frr_attr->custom_attrs = custom_attr_cpy(frr_attr->custom_attrs);
         assert(frr_attr->custom_attrs->refcount == 0);
     }

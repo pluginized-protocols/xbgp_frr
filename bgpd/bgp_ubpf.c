@@ -18,6 +18,7 @@
 #include "bgp_io.h"
 #include "bgp_packet.h"
 #include "bgp_ubpf_attr.h"
+#include "bgp_updgrp.h"
 
 #define ATTR_FLAG_BIT_CUST(X) ({   \
     int _ret;                      \
@@ -1009,6 +1010,50 @@ int remove_route_from_rib(context_t *ctx, struct ubpf_prefix *pfx, struct ubpf_p
 
     list_delete(&matches);
     return 0;
+}
+
+struct bgp_route *get_route_sent_to_peer(context_t *ctx,
+					 struct ubpf_prefix *pfx,
+					 struct ubpf_peer_info *peer) {
+	struct bgp *bgp;
+	struct prefix p;
+	struct bgp_node *n;
+	struct bgp_path_info *pi;
+	struct bgp_route *rte;
+	struct peer_af *paf;
+
+	bgp = bgp_get_default();
+	if (!bgp) return NULL;
+
+	p.family = afi2family(pfx->afi);
+	p.prefixlen = pfx->prefixlen;
+	if (pfx->afi == XBGP_AFI_IPV4) {
+		memcpy(&p.u.prefix4, pfx->u, sizeof(p.u.prefix4));
+	} else {
+		memcpy(&p.u.prefix6, pfx->u, sizeof(p.u.prefix6));
+	}
+
+	n = bgp_node_match(bgp->rib[pfx->afi][pfx->safi], &p);
+	if (!n) return NULL;
+
+
+	for (pi = bgp_node_get_bgp_path_info(n); pi; pi = pi->next) {
+		if (pi->type == ZEBRA_ROUTE_BGP &&
+		    (pi->sub_type == BGP_ROUTE_NORMAL || pi->sub_type == BGP_ROUTE_IMPORTED)) {
+			if (memcmp(&pi->peer->remote_id, &peer->router_id, sizeof(peer->router_id)) == 0) {
+				paf = peer_af_find(pi->peer, pfx->afi, pfx->safi);
+				if (paf && paf->subgroup) {
+					if (subgroup_announce_check(n, pi, paf->subgroup, &p, pi->attr)) {
+						if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) {
+							return NULL;
+						}
+						return rte;
+					}
+				}
+			}
+		}
+	}
+	return NULL;
 }
 
 struct bgp_route *get_rib_out_entry(context_t *ctx, uint8_t af_family,

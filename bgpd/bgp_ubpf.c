@@ -1036,19 +1036,30 @@ struct bgp_route *get_route_sent_to_peer(context_t *ctx,
 	n = bgp_node_match(bgp->rib[pfx->afi][pfx->safi], &p);
 	if (!n) return NULL;
 
+	struct peer *p_peer, *ok_peer;
+	struct listnode *peer_listnode;
+
+	ok_peer = NULL;
+
+	for (ALL_LIST_ELEMENTS_RO(bgp->peer, peer_listnode, p_peer)) {
+		if (p_peer->remote_id.s_addr == peer->router_id) {
+			ok_peer = p_peer;
+			break;
+		}
+	}
+
+	if (!ok_peer) return NULL;
 
 	for (pi = bgp_node_get_bgp_path_info(n); pi; pi = pi->next) {
 		if (pi->type == ZEBRA_ROUTE_BGP &&
 		    (pi->sub_type == BGP_ROUTE_NORMAL || pi->sub_type == BGP_ROUTE_IMPORTED)) {
-			if (memcmp(&pi->peer->remote_id, &peer->router_id, sizeof(peer->router_id)) == 0) {
-				paf = peer_af_find(pi->peer, pfx->afi, pfx->safi);
-				if (paf && paf->subgroup) {
-					if (subgroup_announce_check(n, pi, paf->subgroup, &p, pi->attr)) {
-						if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) {
-							return NULL;
-						}
-						return rte;
+			paf = peer_af_find(ok_peer, pfx->afi, pfx->safi);
+			if (paf && paf->subgroup) {
+				if (subgroup_announce_check(n, pi, paf->subgroup, &p, pi->attr)) {
+					if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) {
+						return NULL;
 					}
+					return rte;
 				}
 			}
 		}

@@ -1042,7 +1042,7 @@ struct bgp_route *get_route_sent_to_peer(context_t *ctx,
 	ok_peer = NULL;
 
 	for (ALL_LIST_ELEMENTS_RO(bgp->peer, peer_listnode, p_peer)) {
-		if (p_peer->remote_id.s_addr == peer->router_id) {
+		if (be32toh(p_peer->remote_id.s_addr) == peer->router_id) {
 			ok_peer = p_peer;
 			break;
 		}

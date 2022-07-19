@@ -599,6 +599,12 @@ struct path_attribute *get_attr_from_code_by_route(context_t *ctx, uint8_t code,
 }
 
 
+static inline void fill_peer_nexthop(struct ubpf_peer_info *pinfo, struct peer *peer) {
+	/* handle only IPv4 nexthop for now ! */
+	assert(sizeof(peer->nexthop.v4) == sizeof(pinfo->nexthop.in));
+	memcpy(&pinfo->nexthop.in, &peer->nexthop.v4, sizeof(pinfo->nexthop.in));
+}
+
 static inline void fill_peer_info(struct ubpf_peer_info *pinfo, struct peer *peer, int local) {
     union sockunion *sk;
 
@@ -619,6 +625,12 @@ static inline void fill_peer_info(struct ubpf_peer_info *pinfo, struct peer *pee
         // local may be null
         pinfo->addr.af = AF_UNSPEC;
         memset(&pinfo->addr.addr, 0, sizeof(pinfo->addr.addr));
+    }
+
+    if (!local) {
+        fill_peer_nexthop(pinfo, peer);
+    } else {
+        memset(&pinfo->nexthop, 0, sizeof(pinfo->nexthop));
     }
 
     pinfo->as = local ? peer->bgp->as : peer->as;
@@ -1051,7 +1063,7 @@ struct bgp_route *get_route_sent_to_peer(context_t *ctx,
 	if (!ok_peer) return NULL;
 
 	for (pi = bgp_node_get_bgp_path_info(n); pi; pi = pi->next) {
-		if (pi->type == ZEBRA_ROUTE_BGP &&
+		if (pi->type == ZEBRA_ROUTE_BGP && CHECK_FLAG(pi->flags, BGP_PATH_SELECTED) &&
 		    (pi->sub_type == BGP_ROUTE_NORMAL || pi->sub_type == BGP_ROUTE_IMPORTED)) {
 			paf = peer_af_find(ok_peer, pfx->afi, pfx->safi);
 			if (paf && paf->subgroup) {

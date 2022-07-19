@@ -600,8 +600,9 @@ struct path_attribute *get_attr_from_code_by_route(context_t *ctx, uint8_t code,
 
 
 static inline void fill_peer_nexthop(struct ubpf_peer_info *pinfo, struct peer *peer) {
-	/* handle only IPv4 nexthop for now ! */
 	assert(sizeof(peer->nexthop.v4) == sizeof(pinfo->nexthop.in));
+	/* handle only IPv4 nexthop for now ! */
+	pinfo->nexthop.type = AF_INET;
 	memcpy(&pinfo->nexthop.in, &peer->nexthop.v4, sizeof(pinfo->nexthop.in));
 }
 

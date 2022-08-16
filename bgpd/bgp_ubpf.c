@@ -70,8 +70,9 @@ static ssize_t conv_aspath(struct attr *host_attr, uint8_t *buf, size_t buf_len)
         if (!cond_cpy(buf, offset, &curr_seg->type, 1, buf_len)) return -1;
         if (!cond_cpy(buf, offset, &curr_seg->length, 1, buf_len)) return -1;
 
+	/* iterate with for loop to convert as16bit to as32bits */
         for (i = 0; i < curr_seg->length; i++) {
-            as_path_cnv = htonl(curr_seg->as[i]);
+            as_path_cnv = curr_seg->as[i];
             if (!cond_cpy(buf, offset, &as_path_cnv, sizeof(uint32_t), buf_len)) {
                 return -1;
             }

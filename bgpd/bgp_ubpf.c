@@ -19,6 +19,7 @@
 #include "bgp_packet.h"
 #include "bgp_ubpf_attr.h"
 #include "bgp_updgrp.h"
+#include "bgp_fsm.h"
 
 #define ATTR_FLAG_BIT_CUST(X) ({   \
     int _ret;                      \
@@ -1078,6 +1079,7 @@ struct bgp_route *get_route_sent_to_peer(context_t *ctx,
 			}
 		}
 	}
+	bgp_unlock_node(n);
 	return NULL;
 }
 
@@ -1161,7 +1163,9 @@ int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, 
     bgp_packet_set_size(s);
 
     bgp_packet_add(peer, s);
-    bgp_writes_on(peer);
+    //bgp_writes_on(peer);
+    BGP_TIMER_ON(peer->t_generate_updgrp_packets,
+		 bgp_generate_updgrp_packets, 0);
     return 0;
 }
 

@@ -1072,8 +1072,10 @@ struct bgp_route *get_route_sent_to_peer(context_t *ctx,
 			if (paf && paf->subgroup) {
 				if (subgroup_announce_check(n, pi, paf->subgroup, &p, pi->attr)) {
 					if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) {
+						bgp_unlock_node(n);
 						return NULL;
 					}
+					bgp_unlock_node(n);
 					return rte;
 				}
 			}
@@ -1163,9 +1165,7 @@ int schedule_bgp_message(context_t *ctx, int type, struct bgp_message *message, 
     bgp_packet_set_size(s);
 
     bgp_packet_add(peer, s);
-    //bgp_writes_on(peer);
-    BGP_TIMER_ON(peer->t_generate_updgrp_packets,
-		 bgp_generate_updgrp_packets, 0);
+    bgp_writes_on(peer);
     return 0;
 }
 

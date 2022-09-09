@@ -20,6 +20,7 @@
 #include "bgp_ubpf_attr.h"
 #include "bgp_updgrp.h"
 #include "bgp_fsm.h"
+#include "bgp_addpath.h"
 
 #define ATTR_FLAG_BIT_CUST(X) ({   \
     int _ret;                      \
@@ -1070,7 +1071,7 @@ struct bgp_route *get_route_sent_to_peer(context_t *ctx,
 		    (pi->sub_type == BGP_ROUTE_NORMAL || pi->sub_type == BGP_ROUTE_IMPORTED)) {
 			paf = peer_af_find(ok_peer, pfx->afi, pfx->safi);
 			if (paf && paf->subgroup) {
-				if (subgroup_announce_check(n, pi, paf->subgroup, &p, pi->attr)) {
+				if (bgp_adj_out_lookup(ok_peer, n, bgp_addpath_id_for_peer(ok_peer, pfx->afi, pfx->safi, &pi->tx_addpath))) {
 					if (bgp_rte_node_to_ubpf(ctx, pi, &pi->net->p, &rte) != 0) {
 						bgp_unlock_node(n);
 						return NULL;
